@@ -1,5 +1,5 @@
 # Cascade CBDC
-Implementing a Central Banck Digital Coin on top of Cascade. 
+Implementing a Central Bank Digital Coin (CBDC) on top of Cascade. 
 
 ## Requirements
 The following is necessary for compiling this project:
