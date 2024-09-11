@@ -1,0 +1,34 @@
+[
+    {
+        "id": "2b085654-b9cc-40f9-bd14-c541f7bb5cee",
+        "desc": "CBDC",
+        "graph": [
+            {
+                "pathname": "/cbdc/request",
+                "shard_dispatcher_list": ["all"],
+                "user_defined_logic_hook_list": ["ordered"],
+                "user_defined_logic_list": ["583ba368-eb78-4b59-b44e-cbc51d013c93"],
+                "user_defined_logic_stateful_list": ["singlethreaded"],
+                "user_defined_logic_config_list": [
+                    {
+                        "enable_cross_thread_communication":"1",
+                        "enable_wallet_persistence_thread":"1",
+                        "enable_chaining_thread":"1",
+                        "enable_tx_persistence_thread":"1",
+                        "enable_virtual_balance":"1",
+                        "num_threads":"4",
+                        "wallet_persistence_batch_min_size":"0",
+                        "wallet_persistence_batch_max_size":"256",
+                        "wallet_persistence_batch_time_us":"500",
+                        "chaining_batch_min_size":"0",
+                        "chaining_batch_max_size":"128",
+                        "chaining_batch_time_us":"500",
+                        "tx_persistence_batch_min_size":"0",
+                        "tx_persistence_batch_max_size":"128",
+                        "tx_persistence_batch_time_us":"500"
+                    }],
+                "destinations": [{}]
+            }
+        ]
+    }
+]
