@@ -602,7 +602,8 @@ std::tuple<bool,bool,uint32_t> CascadeCBDC::CBDCThread::is_mine(internal_transac
     auto shard = capi.get_shard_members<CBDC_OBJECT_POOL_TYPE>(CBDC_OBJECT_POOL_SUBGROUP,shard_index);
     std::sort(shard.begin(),shard.end());
     
-    bool chain = shard[wallet_id % shard.size()] == node_id;
+    //bool chain = shard[wallet_id % shard.size()] == node_id;
+    bool chain = shard[0] == node_id; // batching is improved if it is always the same node
 
     // check where the next wallet goes, but only of the associated optimization is enabled
     bool same_shard = false;
@@ -788,7 +789,8 @@ void CascadeCBDC::CBDCThread::persist_wallet(wallet_id_t wallet_id,internal_tran
     auto& txid = std::get<0>(*request);
 
     // check if this node is responsible for this persistence
-    if(!is_my_persistence(wallet_id)){
+    //if(!is_my_persistence(wallet_id)){
+    if(!is_my_persistence(0)){ // batching is improved if it is always the same node
         return;
     }
 
@@ -824,7 +826,8 @@ void CascadeCBDC::CBDCThread::persist_transaction(internal_transaction_t* tx){
     auto& txid = std::get<0>(*request);
     
     // check if this node is responsible for this persistence
-    if(!is_my_persistence(txid)){
+    //if(!is_my_persistence(txid)){
+    if(!is_my_persistence(0)){ // batching is improved if it is always the same node
         return;
     }
     
