@@ -102,7 +102,6 @@ class CascadeCBDC: public DefaultOffCriticalDataPathObserver {
         // queue and conflict tracking
         void enqueue_transaction(internal_transaction_t* tx,wallet_id_t wallet_id);
         bool dequeue_transaction(internal_transaction_t* tx,wallet_id_t wallet_id);
-        bool conflicts(internal_transaction_t* new_tx,internal_transaction_t* old_tx,wallet_id_t wallet_id);
         bool has_conflict(internal_transaction_t* tx,wallet_id_t wallet_id);
         bool is_valid(internal_transaction_t* tx,wallet_id_t wallet_id);
         

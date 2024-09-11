@@ -16,6 +16,7 @@
                         "enable_chaining_thread":"1",
                         "enable_tx_persistence_thread":"1",
                         "enable_virtual_balance":"1",
+                        "enable_source_only_conflicts":"1",
                         "num_threads":"4",
                         "wallet_persistence_batch_min_size":"0",
                         "wallet_persistence_batch_max_size":"256",

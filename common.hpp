@@ -26,10 +26,11 @@ using transaction_t = std::tuple<cbdc_request_t,transaction_status_t>; // reques
 
 using cascade_cbdc_config_t = struct cascade_cbdc_config_t {
     bool enable_cross_thread_communication;             // thread send a request directly to another thread if next wallet is in the same shard (instead of multicasting)
-    bool enable_wallet_persistence_thread;              // TODO start a thread responsible for putting wallets in batches (instead of individually putting them in each thread)
-    bool enable_tx_persistence_thread;                  // TODO start a thread responsible for putting TXs
-    bool enable_chaining_thread;                        // TODO start a thread responsible for chaining requests (instead of doing it in each thread)
-    bool enable_virtual_balance;                        // TODO ignore conflict if the wallet is handled by the same thread and there are enough virtual funds
+    bool enable_wallet_persistence_thread;              // start a thread responsible for putting wallets in batches (instead of individually putting them in each thread)
+    bool enable_tx_persistence_thread;                  // start a thread responsible for putting TXs
+    bool enable_chaining_thread;                        // start a thread responsible for chaining requests (instead of doing it in each thread)
+    bool enable_virtual_balance;                        // ignore conflict if the wallet is handled by the same thread and there are enough virtual funds
+    bool enable_source_only_conflicts;                  // ignore destination wallets when checking for conflicts
 
     uint64_t num_threads;                               // number of worker threads
 

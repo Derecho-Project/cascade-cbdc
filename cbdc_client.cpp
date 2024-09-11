@@ -87,10 +87,13 @@ transaction_id_t CascadeCBDC::transfer(const std::unordered_map<wallet_id_t,coin
         sorted_wallets.push_back(item.first);
         value_in += item.second;
     }
-    
-    for(auto& item : receivers){
-        sorted_wallets.push_back(item.first);
-        value_out += item.second;
+
+    if(!config.enable_source_only_conflicts){
+        // add destinations before ordering if this optimization is disabled
+        for(auto& item : receivers){
+            sorted_wallets.push_back(item.first);
+            value_out += item.second;
+        }
     }
 
     std::sort(sorted_wallets.begin(),sorted_wallets.end(),[&](const wallet_id_t &a, const wallet_id_t &b){
@@ -106,6 +109,14 @@ transaction_id_t CascadeCBDC::transfer(const std::unordered_map<wallet_id_t,coin
 
                 return a_index > b_index;
             });
+
+    if(config.enable_source_only_conflicts){
+        // add destinations after ordering if this optimization is enabled
+        for(auto& item : receivers){
+            sorted_wallets.push_back(item.first);
+            value_out += item.second;
+        }
+    }
 
     // validate if value_in == value_out
     if(value_in != value_out){

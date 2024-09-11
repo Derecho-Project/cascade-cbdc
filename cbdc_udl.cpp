@@ -10,6 +10,7 @@ CascadeCBDC::CascadeCBDC(){
     config.enable_tx_persistence_thread = false;
     config.enable_chaining_thread = false;
     config.enable_virtual_balance = false;
+    config.enable_source_only_conflicts = false;
 
     config.num_threads = 1;
     
@@ -47,6 +48,10 @@ void CascadeCBDC::set_config(DefaultCascadeContextType* typed_ctxt,const nlohman
     
     if(config.count("enable_virtual_balance") > 0){
         this->config.enable_virtual_balance = std::string(config["enable_virtual_balance"]) != "0";
+    }
+    
+    if(config.count("enable_source_only_conflicts") > 0){
+        this->config.enable_source_only_conflicts = std::string(config["enable_source_only_conflicts"]) != "0";
     }
     
     if(config.count("num_threads") > 0){
@@ -392,9 +397,12 @@ void CascadeCBDC::CBDCThread::enqueue_transaction(internal_transaction_t* tx,wal
     for(auto& src : sources){
         pending_transactions_wallet_dependencies[src.first].insert(tx);
     } 
-    for(auto& dest : destinations){
-        pending_transactions_wallet_dependencies[dest.first].insert(tx);
-    } 
+    if(!udl->config.enable_source_only_conflicts){
+        // if this optimization is disabled, add destinations to the conflict checking structure
+        for(auto& dest : destinations){
+            pending_transactions_wallet_dependencies[dest.first].insert(tx);
+        }
+    }
 }
 
 bool CascadeCBDC::CBDCThread::dequeue_transaction(internal_transaction_t* tx,wallet_id_t wallet_id){
@@ -418,25 +426,6 @@ bool CascadeCBDC::CBDCThread::dequeue_transaction(internal_transaction_t* tx,wal
 
         return true;
     }
-    return false;
-}
-
-// check if an incoming TX (new_tx) coflicts with a TX already in the queue (old_tx)
-bool CascadeCBDC::CBDCThread::conflicts(internal_transaction_t* new_tx,internal_transaction_t* old_tx,wallet_id_t wallet_id){
-    auto new_request = new_tx->request;
-    auto& new_sources = std::get<1>(*new_request);
-    auto& new_destinations = std::get<2>(*new_request);
-    
-    auto old_request = old_tx->request;
-    auto& old_sources = std::get<1>(*old_request);
-    auto& old_destinations = std::get<2>(*old_request);
-
-    for(auto& src : new_sources){
-        if((old_sources.count(src.first) > 0) || (old_destinations.count(src.first) > 0)){
-            return true;
-        }
-    }
-    
     return false;
 }
 
