@@ -13,7 +13,7 @@
 #define LAST_TX_POLL_INTERVAL_MS 1000
 #define DEFAULT_SECONDS_AFTER_STEP 5
 #define DEFAULT_BATCH_MIN_SIZE 0
-#define DEFAULT_BATCH_MAX_SIZE 128
+#define DEFAULT_BATCH_MAX_SIZE 150
 #define DEFAULT_BATCH_TIME_US 500
 
 void print_help(const std::string& bin_name){

@@ -41,9 +41,9 @@ using queued_wallet_t = std::tuple<wallet_id_t,wallet_t,transaction_id_t>;
 
 using queued_chain_t = std::tuple<operation_type_t,wallet_id_t,cbdc_request_t*>;
 
-#define CBDC_REQUEST_FORWARD_PREFIX CBDC_REQUEST_PREFIX "/forward/WID_" // + wallet_id
-#define CBDC_REQUEST_COMMIT_PREFIX CBDC_REQUEST_PREFIX "/commit/WID_" // + wallet_id
-#define CBDC_REQUEST_ABORT_PREFIX CBDC_REQUEST_PREFIX "/abort/WID_" // + wallet_id
+#define CBDC_REQUEST_FORWARD_PREFIX CBDC_REQUEST_PREFIX "/f/WID_" // + wallet_id
+#define CBDC_REQUEST_COMMIT_PREFIX CBDC_REQUEST_PREFIX "/c/WID_" // + wallet_id
+#define CBDC_REQUEST_ABORT_PREFIX CBDC_REQUEST_PREFIX "/a/WID_" // + wallet_id
 
 inline std::string CBDC_BUILD_FORWARD_KEY(wallet_id_t wallet_id){
     return CBDC_REQUEST_FORWARD_PREFIX + std::to_string(wallet_id);

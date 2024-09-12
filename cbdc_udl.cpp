@@ -98,12 +98,12 @@ void CascadeCBDC::set_config(DefaultCascadeContextType* typed_ctxt,const nlohman
 }
 
 operation_type_t CascadeCBDC::operation_str_to_type(const std::string &operation_str){
-    if(operation_str == "mint") return operation_type_t::MINT;
-    else if(operation_str == "transfer") return operation_type_t::TRANSFER;
-    else if(operation_str == "redeem") return operation_type_t::REDEEM;
-    else if(operation_str == "forward") return operation_type_t::FORWARD;
-    else if(operation_str == "commit") return operation_type_t::COMMIT;
-    else if(operation_str == "abort") return operation_type_t::ABORT;
+    if(operation_str == "m") return operation_type_t::MINT;
+    else if(operation_str == "t") return operation_type_t::TRANSFER;
+    else if(operation_str == "r") return operation_type_t::REDEEM;
+    else if(operation_str == "f") return operation_type_t::FORWARD;
+    else if(operation_str == "c") return operation_type_t::COMMIT;
+    else if(operation_str == "a") return operation_type_t::ABORT;
     return operation_type_t::NONE;
 }
 

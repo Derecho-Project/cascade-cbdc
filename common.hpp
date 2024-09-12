@@ -51,18 +51,18 @@ using cascade_cbdc_config_t = struct cascade_cbdc_config_t {
 #define CBDC_PREFIX "/cbdc"
 
 // keys for client requests
-#define CBDC_REQUEST_PREFIX CBDC_PREFIX "/request"
-#define CBDC_REQUEST_MINT_PREFIX CBDC_REQUEST_PREFIX "/mint/WID_" // + wallet_id
-#define CBDC_REQUEST_TRANSFER_PREFIX CBDC_REQUEST_PREFIX "/transfer/WID_" // + wallet_id
-#define CBDC_REQUEST_REDEEM_PREFIX CBDC_REQUEST_PREFIX "/redeem/WID_" // + wallet_id
+#define CBDC_REQUEST_PREFIX CBDC_PREFIX "/r"
+#define CBDC_REQUEST_MINT_PREFIX CBDC_REQUEST_PREFIX "/m/WID_" // + wallet_id
+#define CBDC_REQUEST_TRANSFER_PREFIX CBDC_REQUEST_PREFIX "/t/WID_" // + wallet_id
+#define CBDC_REQUEST_REDEEM_PREFIX CBDC_REQUEST_PREFIX "/r/WID_" // + wallet_id
 #define CBDC_REQUEST_LOG_KEY CBDC_REQUEST_PREFIX "/log"
 #define CBDC_REQUEST_INIT_KEY CBDC_REQUEST_PREFIX "/init"
 
 // keys for storing wallets
-#define CBDC_WALLET_PREFIX CBDC_PREFIX "/wallet/WID_" // + wallet_id
+#define CBDC_WALLET_PREFIX CBDC_PREFIX "/w/WID_" // + wallet_id
 
 // keys for storing transactions
-#define CBDC_TRANSACTION_PREFIX CBDC_PREFIX "/transaction/" // + transaction_id
+#define CBDC_TRANSACTION_PREFIX CBDC_PREFIX "/tx/" // + transaction_id
 
 // object pool config
 #define CBDC_OBJECT_POOL_PREFIX CBDC_PREFIX
