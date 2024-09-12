@@ -34,7 +34,7 @@ void CascadeCBDC::setup(uint64_t batch_min_size,uint64_t batch_max_size,uint64_t
     while(!retrieved){ // poll the configuration object
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         
-        auto res = capi.get(config_key,CURRENT_VERSION,true);
+        auto res = capi.get(config_key,CURRENT_VERSION,false);
         for (auto& reply_future : res.get()){
             auto& obj = reply_future.second.get();
 
@@ -172,7 +172,7 @@ std::string CascadeCBDC::status_to_string(const transaction_status_t status){
 
 wallet_t CascadeCBDC::get_wallet(wallet_id_t wallet_id){
     const std::string& key = CBDC_BUILD_WALLET_KEY(wallet_id);
-    auto res = capi.get(key,CURRENT_VERSION,true);
+    auto res = capi.get(key,CURRENT_VERSION,false);
     for (auto& reply_future : res.get()){
         auto& obj = reply_future.second.get();
 
@@ -186,7 +186,7 @@ wallet_t CascadeCBDC::get_wallet(wallet_id_t wallet_id){
 
 transaction_status_t CascadeCBDC::get_status(const transaction_id_t& txid){
     const std::string& key = CBDC_BUILD_TRANSACTION_KEY(txid);
-    auto res = capi.get(key,CURRENT_VERSION,true);
+    auto res = capi.get(key,CURRENT_VERSION,false);
     for (auto& reply_future : res.get()){
         auto& obj = reply_future.second.get();
 
