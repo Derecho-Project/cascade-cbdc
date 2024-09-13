@@ -1,12 +1,40 @@
-# Cascade CBDC
-Implementing a Central Bank Digital Coin (CBDC) on top of Cascade. 
+# CascadeCBDC
+CascadeCBDC is a Central Bank Digital Coin (CBDC) built on top of Cascade. It
+makes use of the fast K/V store and the User Defined Logic (UDL) framework
+provided by Cascade. Replication and sharding features are inherited from
+Cascade (and the Derecho library underneath), while CascadeCBDC implements a
+protocol based on chain replication to ensure the consistency of multi-shard
+transactions. Furthermore, CascadeCBDC leverages CascadeChain for WAN
+replication and auditability. CascadeChain creates a tamper-proof auditable log,
+structured as cryptographically linked batches of transactions, which is
+replicated across geographically distributed sites. Innovations include our
+security model, which matches well with CBDC real-world requirements, and a
+series of architectural design choices that move most operations off the
+critical path in order to ensure high throughput and low latency.
+
+Table of contents:
+
+- [Requirements](#requirements)
+- [Overview](#overview)
+- [Setup](#setup)
+- [Benchmark tools](#benchmark-tools)
+
 
 ## Requirements
 The following is necessary for compiling this project:
 - Cascade (https://github.com/Derecho-Project/cascade), branch `single_shard_multiobject_put` (the master branch won't work)
 - gzstream and zlib (in Ubuntu: `apt install libgzstream-dev zlib1g-dev`)
 
-## Generating benchmark workload
+
+
+## Overview
+
+## Setup
+
+## Benchmark tools
+
+
+### Generating benchmark workload
 The `generate_workload` executable generates a workload that can be used to run a benchmark. The workload is saved in a zipped file.
 ```
 $ ./generate_workload -h
@@ -68,7 +96,7 @@ The generated file can be loaded using the static method `CBDCBenchmarkWorkload:
 - Expected status: obtained by calling `get_expected_status()`
     - This is a map between the transfer index (following the order returned by `get_transfers()`) and whether the corresponding transfer should be successful or not. This is relevant in case of conflicting transfers.
 
-## Running a benchmark
+### Running a benchmark
 The `run_benchmark` executable runs a benchmark using a given workload file (pre-generated with `generate_workload`). It uses the CascadeCBDC class, which starts a Cascade external client, thus there must be a `derecho.cfg` configuring it.
 ```
 $ ./run_benchmark -h
@@ -102,7 +130,7 @@ done
 
 Please see `run_benchmark.cpp` to understand how to read from `CBDCBenchmarkWorkload` and call the mint and transfer operations in `CascadeCBDC`.
 
-## Metrics
+### Metrics
 The script `metrics.py` takes benchmark log outputs (from client and servers) and computes some simple metrics, such as throughput and latency breakdown. The log output from servers must be downloaded (they are saved by each server in a file named according to the `-l` option of `run_benchmark` (default cbdc.log). 
 ```
 $ ./metrics.py -h
