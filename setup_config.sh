@@ -16,10 +16,10 @@ SCRIPTPATH=`dirname $SCRIPT`
 CURDIR=`pwd`
 cd $SCRIPTPATH/cfg
 
-CONFIG_TMP=derecho.cfg
+CONFIG_TMP=derecho.cfg.tmp
 LAYOUT_TMP=layout.json.tmp
-DLL_TMP=udl_dlls.cfg.tmp
-DFG_TMP=dfgs.json.tmp
+DLL_TMP=udl_dlls.cfg
+DFG_TMP=dfgs.json
 
 LAYOUT_CFG=layout.json
 DLL_CFG=udl_dlls.cfg

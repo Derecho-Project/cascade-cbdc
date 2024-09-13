@@ -18,18 +18,56 @@ Table of contents:
 - [Overview](#overview)
 - [Setup](#setup)
 - [Benchmark tools](#benchmark-tools)
+- [Configuration options](#configuration-options)
 
 
 ## Requirements
-The following is necessary for compiling this project:
+
+The easiest way to try out this project is to use our docker image with all the requirements pre-installed:
+```
+$ sudo docker run -d --hostname cascade-cbdc --name cascade-cbdc -it tgarr/cascade-cbdc:latest
+$ sudo docker exec -w /root -it cascade-cbdc /bin/bash -l
+```
+
+We assume the use of the docker image in the examples and instructions provided in this document. In case you do not wish to use it, the following is required to compile and run CascadeCBDC:
+
 - Cascade (https://github.com/Derecho-Project/cascade), branch `single_shard_multiobject_put` (the master branch won't work)
-- gzstream and zlib (in Ubuntu: `apt install libgzstream-dev zlib1g-dev`)
-
-
+- gzstream and zlib (in Ubuntu: `sudo apt install libgzstream-dev zlib1g-dev`)
 
 ## Overview
 
 ## Setup
+This section will give instructions on how to compile and run CascadeCBDC in a basic deployment, with two Cascader servers and one client, all in the same host (in this case, a docker container running our image).
+
+### Compilation
+```
+root@cascade-cbdc:~# git clone https://github.com/Derecho-Project/cascade-cbdc.git
+root@cascade-cbdc:~# mkdir cascade-cbdc/build && cd cascade-cbdc/build
+root@cascade-cbdc:~/cascade-cbdc/build# cmake .. && make -j
+```
+This will create the following in the `build` directory (we omit below other files that are not relevant):
+
+- `cfg`: folder containing the configuration files necessary to run Cascade server processes and a CascadeCBDC client
+    - `dfgs.json`: UDL configuration, containing all UDLs to be loaded by Cascade, how each one is triggered, and custom configuration options for each UDL. In CascadeCBDC, there is only one UDL that implements the CascadeCBDC service, with several options for performance tuning. This file must be the same for all server processes.
+    - `layout.json`: this configures the layout of the deployment, i.e. how many shards and processes per shard, as well as the exact shard membership. This file must be the same for all server and client processes.
+    - `udl_dlls.cfg`: this lists the shared libraries (containing UDLs) that should be loaded by the Cascade servers. This file must be the same for all server processes.
+    - `n0`: folder containing configuration files to run a Cascader server with ID 0
+        - `derecho.cfg`: Cascade and Derecho configuration file, setting the process ID and network configuration (addresses,ports,protocols).
+        - `dfgs.json`,`layout.json`,`udl_dlls.cfg`: links to the corresponding files in the parent folder.
+    - `n1`: folder containing configuration files to run Cascader server with ID 1
+        - `derecho.cfg`: Cascade and Derecho configuration file, setting the process ID and network configuration (addresses,ports,protocols).
+        - `dfgs.json`,`layout.json`,`udl_dlls.cfg`: links to the corresponding files in the parent folder.
+    - `client`: folder containing configuration files to run a CascadeCBDC client
+        - `derecho.cfg`: Cascade and Derecho configuration file, setting the process ID and network configuration (addresses,ports,protocols).
+        - `dfgs.json`,`layout.json`,`udl_dlls.cfg`: links to the corresponding files in the parent folder.
+        - `generate_workload`,`run_benchmark`,`metrics.py`: links to the executable in the `build` folder, for convinience
+- `libcbdc_udl.so`: this shared library is loaded by all Cascade servers. It contains the UDL that implements the CascadeCBDC service.
+- `generate_workload`: this executable generates a workload used as input to `run_benchmark` (more details in [Benchmark tools](#benchmark-tools))
+- `run_benchmark`: this executable runs a benchmark using a given workload file (more details in [Benchmark tools](#benchmark-tools))
+- `metrics.py`: this script takes benchmark log outputs (from client and servers) and computes some simple metrics, such as throughput and latency breakdown (more details in [Benchmark tools](#benchmark-tools)).
+
+### Starting the service
+
 
 ## Benchmark tools
 
@@ -165,4 +203,20 @@ latency breakdown:
   forward:   avg  0.004 | std  0.001 | med  0.004 | min  0.002 | max  0.020 | p95  0.006 | p99  0.008
   backward:  avg  0.004 | std  0.002 | med  0.004 | min  0.002 | max  0.022 | p95  0.006 | p99  0.013
 ```
+
+## Configuration options
+
+### Cascade configuration
+
+#### Increasing servers and clients
+To have more clients, shards, and/or processes per shard
+
+#### Network configuration
+In case you want to deploy Cascade servers and clients on separate nodes in a network.
+
+In case you want to use RDMA instead of TCP.
+
+### CascadeCBDC client configuration
+
+### CascadeCBDC service configuration
 

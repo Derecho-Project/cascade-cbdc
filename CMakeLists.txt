@@ -45,8 +45,8 @@ add_custom_command(TARGET cbdc_udl POST_BUILD
     DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/setup_config.sh
             ${CMAKE_CURRENT_SOURCE_DIR}/metrics.py
             ${CMAKE_CURRENT_SOURCE_DIR}/cfg/layout.json.tmp
-            ${CMAKE_CURRENT_SOURCE_DIR}/cfg/derecho.cfg
-            ${CMAKE_CURRENT_SOURCE_DIR}/cfg/dfgs.json.tmp
-            ${CMAKE_CURRENT_SOURCE_DIR}/cfg/udl_dlls.cfg.tmp
+            ${CMAKE_CURRENT_SOURCE_DIR}/cfg/derecho.cfg.tmp
+            ${CMAKE_CURRENT_SOURCE_DIR}/cfg/dfgs.json
+            ${CMAKE_CURRENT_SOURCE_DIR}/cfg/udl_dlls.cfg
 )
 
