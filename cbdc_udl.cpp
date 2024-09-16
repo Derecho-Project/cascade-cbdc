@@ -793,6 +793,13 @@ void CascadeCBDC::CBDCThread::send_status_backward(internal_transaction_t* tx,wa
 // wallet operations
 
 void CascadeCBDC::CBDCThread::fetch_wallet(wallet_id_t wallet_id){
+    wallet_cache[wallet_id] = 0;
+
+    /* TODO
+     * For now, we always start the service with new wallets, even if there were already balances stored in the K/V store.
+     * This is just for convenience: it makes it easier to run the benchmarks while we are still just evaluating performance.
+     * However, in a real deployment, a recovering node should fetch an existing wallet using the code below.
+     *
     ServiceClientAPI& capi = ServiceClientAPI::get_service_client();
     const std::string& key = CBDC_BUILD_WALLET_KEY(wallet_id);
 
@@ -808,6 +815,7 @@ void CascadeCBDC::CBDCThread::fetch_wallet(wallet_id_t wallet_id){
             wallet_cache[wallet_id] = 0;
         }
     }
+    */
 }
 
 coin_value_t CascadeCBDC::CBDCThread::add_to_wallet(wallet_t &wallet,coin_value_t value){
