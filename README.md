@@ -24,7 +24,7 @@ Table of contents:
 ## Requirements
 
 The easiest way to try out this project is to use our docker image with all the requirements pre-installed:
-```sh
+```
 $ sudo docker run -d --hostname cascade-cbdc --name cascade-cbdc -it tgarr/cascade-cbdc:latest
 $ sudo docker exec -w /root -it cascade-cbdc /bin/bash -l
 ```
@@ -40,7 +40,7 @@ We assume the use of the docker image in the examples and instructions provided 
 This section will give instructions on how to compile and run CascadeCBDC in a basic deployment, with two Cascader servers and one client, all in the same host (in this case, a docker container running our image). In order to increase the number of servers/clients, or to run processes in multiples network nodes, see [Configuration options](#configuration-options).
 
 ### Compilation
-```sh
+```
 root@cascade-cbdc:~# git clone https://github.com/Derecho-Project/cascade-cbdc.git
 root@cascade-cbdc:~# mkdir cascade-cbdc/build && cd cascade-cbdc/build
 root@cascade-cbdc:~/cascade-cbdc/build# cmake .. && make -j
@@ -77,7 +77,7 @@ To start the service, it's necessary to run two instances of `cascade_server`: o
 <tr>
 <td>
 
-```sh
+```
 $ cascade_server 
 Press Enter to Shutdown.
 
@@ -86,7 +86,7 @@ Press Enter to Shutdown.
 </td>
 <td>
 
-```sh
+```
 $ cascade_server 
 Press Enter to Shutdown.
 
@@ -130,29 +130,31 @@ Quitting Cascade Client Shell
 Your are ready now to run CascadeCBDC! See below how to use the benchmark tools.
 
 ## Benchmark tools
+Three tools are currently provided, in the form of three executables: `generate_workload`, `run_benchmark`, and `metrics.py`. These tools only evaluate transaction processing in a local deployment. WAN replication is not implemented yet.
 
+A workload file should first be generated using `generate_workload`. A workload consists of a set of transfers to be performed between wallets. `run_benchmark` executes a given workload and generate log files containing several timestamps. The `metrics.py` script computes metrics based on the generated log files. More defails on each tool below.
 
 ### Generating benchmark workload
 The `generate_workload` executable generates a workload that can be used to run a benchmark. The workload is saved in a zipped file.
 ```
-$ ./generate_workload -h
+root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# ./generate_workload -h
 usage: ./generate_workload [options]
 options:
- -w <num_wallets>               number of wallets to create
- -n <wallet_start_id>           wallets initial id
- -t <transfers_per_wallet>      how many times each wallet appears across all transfers
- -s <senders_per_transfer>      number of wallets sending coins in each transfer
- -r <receivers_per_transfer>    number of wallets receiving coins in each transfer
+ -w <num_wallets>		number of wallets to create
+ -n <wallet_start_id>		wallets initial id
+ -t <transfers_per_wallet>	how many times each wallet appears across all transfers
+ -s <senders_per_transfer>	number of wallets sending coins in each transfer
+ -r <receivers_per_transfer>	number of wallets receiving coins in each transfer
  -i <wallet_initial_balance>	initial balance of each wallet
- -v <transfer_value>            amount transfered from each sender
- -g <random_seed>               seed for the RNG
- -o <output_file>               file to write the generated workload (zipped)
- -h                             show this help
+ -v <transfer_value>		amount transfered from each sender
+ -g <random_seed>		seed for the RNG
+ -o <output_file>		file to write the generated workload (zipped)
+ -h				show this help
 ```
 
 The default name of the output file is a concatenation of all parameters, with the extension `.gz`. The generated file can be seen uzing `zcat`. For example:
 ```
-$ ./generate_workload -w 4
+root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# ./generate_workload -w 4
 parameters:
  num_wallets = 4
  wallet_start_id = 0
@@ -167,8 +169,7 @@ parameters:
 generating ...
 writing to '4_0_1_1_1_100000_10_3.gz' ...
 done
-
-$ zcat 4_0_1_1_1_100000_10_3.gz
+root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# zcat 4_0_1_1_1_100000_10_3.gz 
 4 0 1 1 1 100000 10 3 2 4 2
 0 100000
 1 100000
@@ -197,71 +198,74 @@ The generated file can be loaded using the static method `CBDCBenchmarkWorkload:
 ### Running a benchmark
 The `run_benchmark` executable runs a benchmark using a given workload file (pre-generated with `generate_workload`). It uses the CascadeCBDC class, which starts a Cascade external client, thus there must be a `derecho.cfg` configuring it.
 ```
-$ ./run_benchmark -h
+root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# ./run_benchmark -h
 usage: ./run_benchmark [options] <benchmark_workload_file>
 options:
- -o <output_file>   file to write the local measurements log
- -l <remote_log>    file to write the remote measurements logs
- -r <send_rate>     rate (in transfers/second) at which to send transfers (default: unlimited)
- -w <wait_time>     time to wait (in seconds) after each step (default: 2)
- -m                 skip minting step
- -s                 skip transfer step
- -c                 skip check step
- -h                 show this help
+ -o <output_file>	file to write the local measurements log
+ -l <remote_log>	file to write the remote measurements logs
+ -r <send_rate>	rate (in transfers/second) at which to send transfers (default: unlimited)
+ -w <wait_time>	time to wait (in seconds) after each step (default: 5)
+ -b <batch_min_size>	minimum batch size (default: 0)
+ -x <batch_max_size>	maximum batch size (default: 150)
+ -u <batch_time_us>	maximum time to wait for the batch minimum size, in microseconds (default: 500)
+ -a			do not reset the service (Note: this can lead to incorrect final balances if re-executing the same benchmark)
+ -m			skip minting step
+ -s			skip transfer step
+ -c			skip check step
+ -h			show this help
 ```
 
-Example of execution:
+See below an example of execution in our container. In this example, `run_benchmark` needs to be called in the `cfg/client` folder, since `run_benchmark` connects to Cascade as an external client (thus requires the configuration files in the folder). The Cascade servers need to be started in the same way as described [above](#starting-the-service). The example below uses a workload with 20000 wallets and 10000 transfers between those wallets, generated with the command `./generate_workload -w 20000`.
 ```
-$ ./run_benchmark 2000_0_1_1_1_100000_10_3.gz -r 5000
+root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# ./run_benchmark 20000_0_1_1_1_100000_10_3.gz
 setting up ...
+  workload_file = 20000_0_1_1_1_100000_10_3.gz
+  send_rate = 0
+  wait_time = 5
+  batch_min_size = 0
+  batch_max_size = 150
+  batch_time_us = 500
+  output_file = 20000_0_1_1_1_100000_10_3.gz.log
+  remote_log = cbdc.log
+resetting the CBDC service ...
 minting wallets ...
 waiting last mint to finish ...
-performing 1000 transfers ...
+performing 10000 transfers ...
 waiting last TX to finish ...
-checking 2000 final balances ...
+checking 20000 final balances ...
   0 balance errors found
-checking 1000 final status ...
+checking 10000 final status ...
   0 status errors found
-writing log to '2000_0_1_1_1_100000_10_3.gz.log' ...
+writing log to '20000_0_1_1_1_100000_10_3.gz.log' ...
 done
 ```
 
-Please see `run_benchmark.cpp` to understand how to read from `CBDCBenchmarkWorkload` and call the mint and transfer operations in `CascadeCBDC`.
+This will generate a set of logs: one at the client and one in each server process (except for process ID 0). By default, the name of the log file at the servers is `cbdc.log`, while at the client the default is the name of the workload file + `.log`.
 
 ### Metrics
-The script `metrics.py` takes benchmark log outputs (from client and servers) and computes some simple metrics, such as throughput and latency breakdown. The log output from servers must be downloaded (they are saved by each server in a file named according to the `-l` option of `run_benchmark` (default cbdc.log). 
+The script `metrics.py` takes benchmark log outputs (from client and servers) and computes some simple metrics, such as throughput and end-to-end latency. The log output from servers must be downloaded (they are saved by each server in a file named according to the `-l` option of `run_benchmark` (default `cbdc.log`).
 ```
-$ ./metrics.py -h
-usage: metrics [-h] [-t] [-l] files [files ...]
+root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# ./metrics.py -h
+usage: metrics [-h] [-b] [-l] files [files ...]
 
-Compute metrics from Cascade timestamp log files
+Compute metrics from Cascade timestamp log files. Always compute throughput, other metrics are optional.
 
 positional arguments:
-  files             Cascade timestamp log files
+  files           Cascade timestamp log files
 
 options:
-  -h, --help        show this help message and exit
-  -t, --throughput  compute throughput
-  -l, --latency     compute latency breakdown
+  -h, --help      show this help message and exit
+  -b, --batching  compute batching statistics
+  -l, --latency   compute latency breakdown
 ```
 
-Example:
+The script computes metrics assuming all hosts have their clocks synchronized with PTP. In our example, all processes are running in the same host, thus all use the same clock. Furthermore, the script discards measurements for the first 5%, and the last 5% transactions (thus only 9000 TXs are considered for the example benchmark above). See below the metrics for the benchmark executed in our example:
 ```
-$ ./metrics.py -t -l 2000_0_1_1_1_100000_10_3.gz.log ../n1/cbdc.log 
-sending rate: 4995.57 tx/s (900 TXs in 0.18 seconds)
-throughput: 4908.09 tx/s (900 TXs in 0.18 seconds)
-
-latency breakdown:
-  e2e:       avg  4.211 | std  0.844 | med  4.148 | min  2.596 | max  7.330 | p95  5.821 | p99  6.747
-  handler:   avg  0.007 | std  0.012 | med  0.007 | min  0.003 | max  0.349 | p95  0.010 | p99  0.017
-  queue:     avg  0.205 | std  0.071 | med  0.191 | min  0.093 | max  0.744 | p95  0.323 | p99  0.437
-  thread:    avg  0.098 | std  0.041 | med  0.090 | min  0.035 | max  0.465 | p95  0.170 | p99  0.255
-  stable:    avg  3.612 | std  0.837 | med  3.544 | min  2.135 | max  6.799 | p95  5.156 | p99  6.152
-  conflict:  avg  0.008 | std  0.003 | med  0.008 | min  0.002 | max  0.030 | p95  0.011 | p99  0.014
-  wallet:    avg  0.040 | std  0.034 | med  0.029 | min  0.010 | max  0.416 | p95  0.102 | p99  0.184
-  txput:     avg  0.032 | std  0.026 | med  0.022 | min  0.011 | max  0.297 | p95  0.079 | p99  0.138
-  forward:   avg  0.004 | std  0.001 | med  0.004 | min  0.002 | max  0.020 | p95  0.006 | p99  0.008
-  backward:  avg  0.004 | std  0.002 | med  0.004 | min  0.002 | max  0.022 | p95  0.006 | p99  0.013
+root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# ./metrics.py 20000_0_1_1_1_100000_10_3.gz.log ../n1/cbdc.log 
+client sending rate: 119414.58 tx/s (9000 TXs in 0.08 seconds)
+real sending rate: 75296.04 tx/s (9000 TXs in 0.12 seconds)
+throughput: 52801.43 tx/s (9000 TXs in 0.17 seconds)
+e2e latency: avg 45.033 | std 14.301 | med 46.885 | min  9.733 | max 76.055 | p95 65.979 | p99 72.960
 ```
 
 ## Configuration options
