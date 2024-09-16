@@ -24,7 +24,7 @@ Table of contents:
 ## Requirements
 
 The easiest way to try out this project is to use our docker image with all the requirements pre-installed:
-```
+```sh
 $ sudo docker run -d --hostname cascade-cbdc --name cascade-cbdc -it tgarr/cascade-cbdc:latest
 $ sudo docker exec -w /root -it cascade-cbdc /bin/bash -l
 ```
@@ -37,10 +37,10 @@ We assume the use of the docker image in the examples and instructions provided 
 ## Overview
 
 ## Setup
-This section will give instructions on how to compile and run CascadeCBDC in a basic deployment, with two Cascader servers and one client, all in the same host (in this case, a docker container running our image).
+This section will give instructions on how to compile and run CascadeCBDC in a basic deployment, with two Cascader servers and one client, all in the same host (in this case, a docker container running our image). In order to increase the number of servers/clients, or to run processes in multiples network nodes, see [Configuration options](#configuration-options).
 
 ### Compilation
-```
+```sh
 root@cascade-cbdc:~# git clone https://github.com/Derecho-Project/cascade-cbdc.git
 root@cascade-cbdc:~# mkdir cascade-cbdc/build && cd cascade-cbdc/build
 root@cascade-cbdc:~/cascade-cbdc/build# cmake .. && make -j
@@ -60,14 +60,74 @@ This will create the following in the `build` directory (we omit below other fil
     - `client`: folder containing configuration files to run a CascadeCBDC client
         - `derecho.cfg`: Cascade and Derecho configuration file, setting the process ID and network configuration (addresses,ports,protocols).
         - `dfgs.json`,`layout.json`,`udl_dlls.cfg`: links to the corresponding files in the parent folder.
-        - `generate_workload`,`run_benchmark`,`metrics.py`: links to the executable in the `build` folder, for convinience
+        - `generate_workload`,`run_benchmark`,`metrics.py`: links to the executable in the `build` folder, for convenience.
 - `libcbdc_udl.so`: this shared library is loaded by all Cascade servers. It contains the UDL that implements the CascadeCBDC service.
 - `generate_workload`: this executable generates a workload used as input to `run_benchmark` (more details in [Benchmark tools](#benchmark-tools))
 - `run_benchmark`: this executable runs a benchmark using a given workload file (more details in [Benchmark tools](#benchmark-tools))
 - `metrics.py`: this script takes benchmark log outputs (from client and servers) and computes some simple metrics, such as throughput and latency breakdown (more details in [Benchmark tools](#benchmark-tools)).
+- `setup_config.sh`: this script generates, in the `cfg` folder, the necessary configuration files for a given number of shards and processes per shard. More details in [Configuration options](#configuration-options).
 
 ### Starting the service
+To start the service, it's necessary to run two instances of `cascade_server`: one in the `cfg/n0` folder and another in the `cfg/n1` folder. The first process is the Cascade metadata service, and the second constitues the single shard (with a single process) of the CascadeCBDC service. Example:
+<table>
+<tr>
+<th>@~/cascade-cbdc/build/cfg/n0</th>
+<th>@~/cascade-cbdc/build/cfg/n1</th>
+</tr>
+<tr>
+<td>
 
+```sh
+$ cascade_server 
+Press Enter to Shutdown.
+
+```
+
+</td>
+<td>
+
+```sh
+$ cascade_server 
+Press Enter to Shutdown.
+
+```
+
+</td>
+</tr>
+</table>
+
+Cascade provides a simple command-line tool for interacting with the K/V store. Let's try it out by running `cascade_client.py` in the `cfg/client` folder. This client provides a shell-like interface. The `help` command lists all available options. Example:
+<table>
+<tr>
+<th>@~/cascade-cbdc/build/cfg/client</th>
+</tr>
+<tr>
+<td>
+
+```
+$ cascade_client.py
+(cascade.client) list_members
+Nodes in Cascade service:[0, 1]
+(cascade.client) create_object_pool /test PersistentCascadeStoreWithStringKey 0
+[3, 1726478940683116]
+(cascade.client) put /test/example hello_world
+[1, 1726478948893719]
+(cascade.client) list_keys_in_object_pool /test
+[
+ ['/test/example']
+]
+(cascade.client) get /test/example
+{'key': '/test/example', 'value': b'hello_world', 'version': 1, 'timestamp': 1726478948893719,
+'previous_version': 0, 'previous_version_by_key': 0, 'message_id': 0}
+(cascade.client) quit
+Quitting Cascade Client Shell
+```
+
+</td>
+</tr>
+</table>
+
+Your are ready now to run CascadeCBDC! See below how to use the benchmark tools.
 
 ## Benchmark tools
 
@@ -219,4 +279,3 @@ In case you want to use RDMA instead of TCP.
 ### CascadeCBDC client configuration
 
 ### CascadeCBDC service configuration
-
