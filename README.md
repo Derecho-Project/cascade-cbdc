@@ -259,7 +259,7 @@ options:
   -l, --latency   compute latency breakdown
 ```
 
-The script computes metrics assuming all hosts have their clocks synchronized with PTP. In our example, all processes are running in the same host, thus all use the same clock. Furthermore, the script discards measurements for the first 5%, and the last 5% transactions (thus only 9000 TXs are considered for the example benchmark above). See below the metrics for the benchmark executed in our example:
+The script computes metrics assuming all hosts have their clocks synchronized with PTP (naturally, this assumption will change when we start evaluating the WAN replication). In our example, all processes are running in the same host, thus all use the same clock. Furthermore, the script discards measurements for the first 5%, and the last 5% transactions (thus only 9000 TXs are considered for the example benchmark above). See below the metrics for the benchmark executed in our example:
 ```
 root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# ./metrics.py 20000_0_1_1_1_100000_10_3.gz.log ../n1/cbdc.log 
 client sending rate: 119414.58 tx/s (9000 TXs in 0.08 seconds)
@@ -272,14 +272,102 @@ e2e latency: avg 45.033 | std 14.301 | med 46.885 | min  9.733 | max 76.055 | p9
 
 ### Cascade configuration
 
+We provide below some tips on how to configure the Cascade deployment on which CascadeCBDC is running. For more details, please refer to the [Cascade repo](https://github.com/Derecho-Project/cascade).
+
 #### Increasing servers and clients
-To have more clients, shards, and/or processes per shard
+To have more clients, shards, and/or processes per shard, it is necessary to generate a new `layout.json` file, as well as a new `derecho.cfg` for each process. The script `setup_config.sh` can do that: the first parameter is the number of shards, while the second parameter is the number of processes per shard. In the example below, configuration files for 2 shards with 2 processes in each are generated, and the resulting folder tree is also shown:
+```
+root@cascade-cbdc:~/cascade-cbdc/build# ./setup_config.sh 2 2
+root@cascade-cbdc:~/cascade-cbdc/build# tree cfg/
+cfg/
+|-- client
+|   |-- derecho.cfg
+|   |-- dfgs.json -> ../dfgs.json
+|   |-- generate_workload -> ../../generate_workload
+|   |-- layout.json -> ../layout.json
+|   |-- metrics.py -> ../../metrics.py
+|   |-- run_benchmark -> ../../run_benchmark
+|   `-- udl_dlls.cfg -> ../udl_dlls.cfg
+|-- derecho.cfg
+|-- derecho.cfg.tmp
+|-- dfgs.json
+|-- dfgs.json.tmp
+|-- layout.json
+|-- layout.json.tmp
+|-- n0
+|   |-- derecho.cfg
+|   |-- dfgs.json -> ../dfgs.json
+|   |-- layout.json -> ../layout.json
+|   `-- udl_dlls.cfg -> ../udl_dlls.cfg
+|-- n1
+|   |-- derecho.cfg
+|   |-- dfgs.json -> ../dfgs.json
+|   |-- layout.json -> ../layout.json
+|   `-- udl_dlls.cfg -> ../udl_dlls.cfg
+|-- n2
+|   |-- derecho.cfg
+|   |-- dfgs.json -> ../dfgs.json
+|   |-- layout.json -> ../layout.json
+|   `-- udl_dlls.cfg -> ../udl_dlls.cfg
+|-- n3
+|   |-- derecho.cfg
+|   |-- dfgs.json -> ../dfgs.json
+|   |-- layout.json -> ../layout.json
+|   `-- udl_dlls.cfg -> ../udl_dlls.cfg
+|-- n4
+|   |-- derecho.cfg
+|   |-- dfgs.json -> ../dfgs.json
+|   |-- layout.json -> ../layout.json
+|   `-- udl_dlls.cfg -> ../udl_dlls.cfg
+|-- udl_dlls.cfg
+`-- udl_dlls.cfg.tmp
+```
 
-#### Network configuration
-In case you want to deploy Cascade servers and clients on separate nodes in a network.
+For starting the service in this case, it is necessary to run `cascade_server` in each of the folder from `n0` to `n4`.
 
-In case you want to use RDMA instead of TCP.
+#### Multiple nodes in a network
+In case you want to deploy Cascade servers and clients on separate nodes in a network, it is necessary to change `derecho.cfg` with the appropriate network configuration for all processes. Three configurations in the file must be changed:
+- `contact_ip`: this must be set to the IP address of the process with ID 0 (the one using the ocnfig files in the `n0` folder).
+- `local_ip`: this must be set to the local IP address of the process. Other processes will use this address to communicate with this process.
+- `domain`: this must be set to network interface to be used (taken from `ifconfig`), e.g. `eth0`.
+
+When copying configuration files from one host to another, it is important to node that two processes cannot have the same ID, which is set by `local_id`  in `derecho.cfg`. Also, when more than one process are in the same host, note that those processes cannot have the same ports assigned to them (see the multiple `*_port` configurations in `derecho.cfg`).
+
+#### Using RDMA
+In case you want to use RDMA instead of TCP, it is necessary to change the following two items in `derecho.cfg` for all processes:
+- `provider` must be set to `verbs`.
+- `domain` must be set to the device name (taken from `ibv_devices`), e.g. `mlx5_1`.
 
 ### CascadeCBDC client configuration
+The `run_benchmark` executable provides many tuning options. The "send rate" (`-r`) option is the most important to note: it sets at which rate the client sends TXs to the CascadeCBDC service. The rate is set in TX per second. A rate of 0 means the client will send TXs as fast as possible. The example below sets the transfer rate to 10000 TX/s, which can be verified by the measurements reported by the `metrics.py` script ("real sending rate" and "throughput").
+```
+root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# ./run_benchmark -r 10000 20000_0_1_1_1_100000_10_3.gz 
+setting up ...
+  workload_file = 20000_0_1_1_1_100000_10_3.gz
+  send_rate = 10000
+  wait_time = 5
+  batch_min_size = 0
+  batch_max_size = 150
+  batch_time_us = 500
+  output_file = 20000_0_1_1_1_100000_10_3.gz.log
+  remote_log = cbdc.log
+resetting the CBDC service ...
+minting wallets ...
+waiting last mint to finish ...
+performing 10000 transfers ...
+waiting last TX to finish ...
+checking 20000 final balances ...
+  0 balance errors found
+checking 10000 final status ...
+  0 status errors found
+writing log to '20000_0_1_1_1_100000_10_3.gz.log' ...
+done
+root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# ./metrics.py 20000_0_1_1_1_100000_10_3.gz.log ../n1/cbdc.log 
+client sending rate: 9984.61 tx/s (9000 TXs in 0.90 seconds)
+real sending rate: 9980.25 tx/s (9000 TXs in 0.90 seconds)
+throughput: 9971.31 tx/s (9000 TXs in 0.90 seconds)
+e2e latency: avg  1.060 | std  0.247 | med  1.029 | min  0.448 | max  3.531 | p95  1.421 | p99  1.931
+```
 
 ### CascadeCBDC service configuration
+The CascadeCBDC service can be configured in the `dfgs.json` file. There are many tuning parameters, but the most important one to note here is `num_threads`. This sets the number of threads each process spawns to process TXs. We recommend between 4 and 8 threads. Note that in addition to these threads, the CascadeCBDC service also starts 3 other threads ("wallet persistence", "chaining", and "tx persistence") dedicated to other purposes. They can be deactivated through the parameters in `dfgs.json`, however performance will be decreased as a result.
