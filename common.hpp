@@ -57,6 +57,7 @@ using cascade_cbdc_config_t = struct cascade_cbdc_config_t {
 #define CBDC_REQUEST_REDEEM_PREFIX CBDC_REQUEST_PREFIX "/r/WID_" // + wallet_id
 #define CBDC_REQUEST_LOG_KEY CBDC_REQUEST_PREFIX "/log"
 #define CBDC_REQUEST_INIT_KEY CBDC_REQUEST_PREFIX "/init"
+#define CBDC_REQUEST_RESET_KEY CBDC_REQUEST_PREFIX "/reset"
 
 // keys for storing wallets
 #define CBDC_WALLET_PREFIX CBDC_PREFIX "/w/WID_" // + wallet_id

@@ -157,6 +157,32 @@ void CascadeCBDC::stop(){
     }
 }
 
+void CascadeCBDC::reset(){
+    for(auto &t : threads){
+        t.reset();
+    }
+
+    if(config.enable_chaining_thread){
+        chain_thread->reset();
+    }
+     
+    if(config.enable_wallet_persistence_thread){
+        wallet_thread->reset();
+    }
+
+    if(config.enable_tx_persistence_thread){
+        tx_thread->reset();
+    }
+
+    for(auto& item : transaction_database){
+        delete item.second->request;
+        delete item.second;
+    }
+    transaction_database.clear();
+        
+    TimestampLogger::clear();
+}
+
 void CascadeCBDC::ocdpo_handler(
         const node_id_t             sender,
         const std::string&          object_pool_pathname,
@@ -168,6 +194,11 @@ void CascadeCBDC::ocdpo_handler(
 
     if(key_string == "log"){ // flush timestamp log for measurements
         TimestampLogger::flush(reinterpret_cast<const char *>(object.blob.bytes));
+        return;
+    }
+    
+    if(key_string == "reset"){ // reset the CBDC service
+        reset();
         return;
     }
     
@@ -261,6 +292,28 @@ void CascadeCBDC::CBDCThread::push_operation(queued_operation_t* queued_op){
     std::unique_lock<std::mutex> lock(thread_mtx);
     operation_queue.push(queued_op);
     thread_signal.notify_all();
+}
+
+void CascadeCBDC::CBDCThread::reset(){
+    std::unique_lock<std::mutex> lock(thread_mtx);
+    for(auto& wallet : wallet_cache){
+        wallet.second = 0;
+        committed_balance[wallet.first] = 0;
+        virtual_balance[wallet.first] = 0;
+    }
+    pending_transactions.clear();
+    pending_transaction_it.clear();
+    forward_conflicts.clear();
+    backward_conflicts.clear();
+    pending_transactions_wallet_dependencies.clear();
+    already_handled.clear();
+    pending_wallets.clear();
+   
+    while(!operation_queue.empty()){
+        auto queued_op = operation_queue.front();
+        operation_queue.pop();
+        delete queued_op;
+    }
 }
 
 void CascadeCBDC::CBDCThread::signal_stop(){
@@ -866,6 +919,12 @@ void CascadeCBDC::WalletPersistenceThread::signal_stop(){
     thread_signal.notify_all();
 }
 
+void CascadeCBDC::WalletPersistenceThread::reset(){
+    while(!wallet_queue.empty()){
+        wallet_queue.pop();
+    }
+}
+
 void CascadeCBDC::WalletPersistenceThread::main_loop(){
     if(!running) return;
    
@@ -940,6 +999,10 @@ void CascadeCBDC::ChainingThread::signal_stop(){
     std::unique_lock<std::mutex> lock(thread_mtx);
     running = false;
     thread_signal.notify_all();
+}
+
+void CascadeCBDC::ChainingThread::reset(){
+    chain_queues.clear();
 }
 
 void CascadeCBDC::ChainingThread::main_loop(){
@@ -1052,6 +1115,10 @@ void CascadeCBDC::TXPersistenceThread::signal_stop(){
     std::unique_lock<std::mutex> lock(thread_mtx);
     running = false;
     thread_signal.notify_all();
+}
+
+void CascadeCBDC::TXPersistenceThread::reset(){
+    tx_queues.clear();
 }
 
 void CascadeCBDC::TXPersistenceThread::main_loop(){

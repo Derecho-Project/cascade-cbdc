@@ -26,6 +26,7 @@ void print_help(const std::string& bin_name){
     std::cout << " -b <batch_min_size>\tminimum batch size (default: " << DEFAULT_BATCH_MIN_SIZE << ")" << std::endl;
     std::cout << " -x <batch_max_size>\tmaximum batch size (default: " << DEFAULT_BATCH_MAX_SIZE << ")" << std::endl;
     std::cout << " -u <batch_time_us>\tmaximum time to wait for the batch minimum size, in microseconds (default: " << DEFAULT_BATCH_TIME_US << ")" << std::endl;
+    std::cout << " -a\t\t\tdo not reset the service (Note: this can lead to incorrect final balances if re-executing the same benchmark)" << std::endl;
     std::cout << " -m\t\t\tskip minting step" << std::endl;
     std::cout << " -s\t\t\tskip transfer step" << std::endl;
     std::cout << " -c\t\t\tskip check step" << std::endl;
@@ -41,11 +42,12 @@ int main(int argc, char** argv){
     bool transfer_step = true;
     bool check_step = true;
     bool rate_control = false;
+    bool reset_service = true;
     uint64_t batch_min_size = DEFAULT_BATCH_MIN_SIZE;
     uint64_t batch_max_size = DEFAULT_BATCH_MAX_SIZE;
     uint64_t batch_time_us = DEFAULT_BATCH_TIME_US;
 
-    while ((c = getopt(argc, argv, "o:r:w:l:b:x:u:msch")) != -1){
+    while ((c = getopt(argc, argv, "o:r:w:l:b:x:u:amsch")) != -1){
         switch(c){
             case 'o':
                 fname = optarg;
@@ -67,6 +69,9 @@ int main(int argc, char** argv){
                 break;
             case 'u':
                 batch_time_us = strtoul(optarg,NULL,10);
+                break;
+            case 'a':
+                reset_service = false;
                 break;
             case 'm':
                 mint_step = false;
@@ -120,6 +125,13 @@ int main(int argc, char** argv){
     if(send_rate != 0){
         rate_control = true;
         iteration_time = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::seconds(1)) / send_rate;
+    }
+
+    // reset the CBDC UDL state in all nodes
+    if(reset_service){
+        std::cout << "resetting the CBDC service ..." << std::endl;
+        cbdc.reset();
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
     // mint coins

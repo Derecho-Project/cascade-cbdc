@@ -77,7 +77,8 @@ class CascadeCBDC {
 
     wallet_t get_wallet(wallet_id_t wallet_id);
     transaction_status_t get_status(const transaction_id_t& txid);
-    
+   
+    void reset(); 
     void write_logs(const std::string local_log,const std::string remote_logs);
 
     // helper methods

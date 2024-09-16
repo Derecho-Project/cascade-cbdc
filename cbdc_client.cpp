@@ -199,6 +199,16 @@ transaction_status_t CascadeCBDC::get_status(const transaction_id_t& txid){
     return transaction_status_t::UNKNOWN;
 }
 
+void CascadeCBDC::reset(){
+    ObjectWithStringKey obj;
+    obj.key = CBDC_REQUEST_RESET_KEY;
+    
+    std::vector<std::vector<uint32_t>> shards = capi.get_subgroup_members(CBDC_PREFIX);
+    for(uint32_t shard_index = 0; shard_index < shards.size(); shard_index++){
+        capi.put_and_forget<CBDC_OBJECT_POOL_TYPE>(obj,CBDC_OBJECT_POOL_SUBGROUP,shard_index,true);
+    }
+}
+
 void CascadeCBDC::write_logs(const std::string local_log,const std::string remote_logs){
     TimestampLogger::flush(local_log);
 

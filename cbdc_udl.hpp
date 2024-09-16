@@ -124,6 +124,7 @@ class CascadeCBDC: public DefaultOffCriticalDataPathObserver {
     public:
         CBDCThread(uint64_t my_thread_id,CascadeCBDC *udl);
         void push_operation(queued_operation_t* queued_op);
+        void reset();
         void signal_stop();
 
         inline void start(){
@@ -154,6 +155,7 @@ class CascadeCBDC: public DefaultOffCriticalDataPathObserver {
         WalletPersistenceThread(CascadeCBDC *udl);
         void push_wallet(queued_wallet_t &queued_wallet);
         void signal_stop();
+        void reset();
 
         inline void start(){
             running = true;
@@ -183,6 +185,7 @@ class CascadeCBDC: public DefaultOffCriticalDataPathObserver {
         ChainingThread(CascadeCBDC *udl);
         void push_chain(queued_chain_t &queued_chain,uint32_t next_shard);
         void signal_stop();
+        void reset();
 
         inline void start(){
             running = true;
@@ -212,6 +215,7 @@ class CascadeCBDC: public DefaultOffCriticalDataPathObserver {
         TXPersistenceThread(CascadeCBDC *udl);
         void push_tx(internal_transaction_t* queued_tx,uint32_t shard);
         void signal_stop();
+        void reset();
 
         inline void start(){
             running = true;
@@ -248,6 +252,7 @@ public:
     
     void set_config(DefaultCascadeContextType* typed_ctxt,const nlohmann::json& config);
     void stop();
+    void reset();
 
     static void initialize() {
         if(!ocdpo_ptr) {
