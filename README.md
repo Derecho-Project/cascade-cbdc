@@ -323,7 +323,7 @@ cfg/
 `-- udl_dlls.cfg.tmp
 ```
 
-For starting the service in this case, it is necessary to run `cascade_server` in each of the folder from `n0` to `n4`.
+For starting the service in this case, it is necessary to run `cascade_server` in each of the folders from `n0` to `n4`.
 
 #### Multiple nodes in a network
 In case you want to deploy Cascade servers and clients on separate nodes in a network, it is necessary to change `derecho.cfg` with the appropriate network configuration for all processes. Three configurations in the file must be changed:
@@ -331,7 +331,7 @@ In case you want to deploy Cascade servers and clients on separate nodes in a ne
 - `local_ip`: this must be set to the local IP address of the process. Other processes will use this address to communicate with this process.
 - `domain`: this must be set to network interface to be used (taken from `ifconfig`), e.g. `eth0`.
 
-When copying configuration files from one host to another, it is important to node that two processes cannot have the same ID, which is set by `local_id`  in `derecho.cfg`. Also, when more than one process are in the same host, note that those processes cannot have the same ports assigned to them (see the multiple `*_port` configurations in `derecho.cfg`).
+When copying configuration files from one host to another, it is important to note that two processes cannot have the same ID, which is set by `local_id`  in `derecho.cfg`. Also, when more than one process are in the same host, note that those processes cannot have the same ports assigned to them (see the multiple `*_port` configurations in `derecho.cfg`).
 
 #### Using RDMA
 In case you want to use RDMA instead of TCP, it is necessary to change the following two items in `derecho.cfg` for all processes:

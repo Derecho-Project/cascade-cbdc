@@ -20,33 +20,8 @@ if(NOT DEFINED NUM_LOCAL_REPLICAS)
     set(NUM_LOCAL_REPLICAS 1)
 endif(NOT DEFINED NUM_LOCAL_REPLICAS)
 
-# CBDC UDL
-add_library(cbdc_udl SHARED cbdc_udl.hpp cbdc_udl.cpp)
-target_include_directories(cbdc_udl PRIVATE
-    $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_SOURCE_DIR}/include>
-    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
-    $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}>
-)
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-add_executable(generate_workload generate_workload.cpp benchmark_workload.cpp)
-target_link_libraries(generate_workload gzstream z)
-
-add_executable(run_benchmark run_benchmark.cpp cbdc_client.cpp benchmark_workload.cpp)
-target_link_libraries(run_benchmark derecho::cascade gzstream z)
-
-# config
-add_custom_command(TARGET cbdc_udl POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}/cfg
-        ${CMAKE_CURRENT_BINARY_DIR}/cfg
-    COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/setup_config.sh ${CMAKE_CURRENT_BINARY_DIR}/
-    COMMAND cp ${CMAKE_CURRENT_SOURCE_DIR}/metrics.py ${CMAKE_CURRENT_BINARY_DIR}/
-    COMMAND ${CMAKE_CURRENT_BINARY_DIR}/setup_config.sh ${NUM_LOCAL_SHARDS} ${NUM_LOCAL_REPLICAS}
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/setup_config.sh
-            ${CMAKE_CURRENT_SOURCE_DIR}/metrics.py
-            ${CMAKE_CURRENT_SOURCE_DIR}/cfg/layout.json.tmp
-            ${CMAKE_CURRENT_SOURCE_DIR}/cfg/derecho.cfg.tmp
-            ${CMAKE_CURRENT_SOURCE_DIR}/cfg/dfgs.json
-            ${CMAKE_CURRENT_SOURCE_DIR}/cfg/udl_dlls.cfg
-)
+add_subdirectory(src)
 
