@@ -14,12 +14,43 @@ critical path in order to ensure high throughput and low latency.
 
 Table of contents:
 
-- [Requirements](#requirements)
 - [Overview](#overview)
+    - [Current implementation](#current-implementation)
+    - [Future work](#future-work)
+- [Requirements](#requirements)
 - [Setup](#setup)
+    - [Compilation](#compilation)
+    - [Starting the service](#starting-the-service)
 - [Benchmark tools](#benchmark-tools)
+    - [Generating benchmark workload](#generating-benchmark-workload)
+    - [Running a benchmark](#running-a-benchmark)
+    - [Metrics](#metrics)
 - [Configuration options](#configuration-options)
+    - [Cascade configuration](#cascade-configuration)
+    - [CascadeCBDC client configuration](#cascadecbdc-client-configuration)
+    - [CascadeCBDC core configuration](#cascadecbdc-client-configuration)
 
+## Overview
+The diagram below show the high-level architecture of CascadeCBDC.
+![image](architecture.png)
+
+CascadeCBDC is composed of multiple sites, which could be, for example, different countries participating in the same global CBDC system. Each site is responsible for maintaining a Cascade deployment (the core transaction processing system) and a user-facing web service in its own datacenter. All transactions are replicated across all sites by CascadeChain, providing a tamper-proof, digitally signed log that is also highly available. Users are directed to specific sites: in the example above, users sent requests to the country where their wallets were registered at.
+
+At each site, a web service receives requests from users. The web service is reponsible for autheticating the user, i.e. verifying if the user has the right to perform the requested operation. Operations are packaged by the web service as transaction and sent to the core system to be processed. The core system is implemented as a User Defined Logic (UDL) on top of the Cascade K/V store. The Cascade repo provides more details about the UDL framework, but essentially a UDL can be tought as a stored procedure that is triggered when certain objects in the K/V store are modified.
+
+The following requests can be made by a user:
+- Transfer funds from a set of wallets to another set of wallets
+- Withdrawn coins to be used outside CascadeCBDC
+- Redeem CBDC-issued coins, depositing them back into a set of wallets
+
+### Current implementation
+A simplified version of the core system is implemented, in addition to a benchmark tool which plays the role of the web service in the diagram above. We are currently focusing on improving the TX processing performance and scalability. Geo-replication, user authentication, wallet management, and external coins issuance/redemption are thus not implemented yet.
+
+### Future work
+CascadeCBDC is in active research and development. There's no de facto standard or regulation to what a CBDC is and what are the requirements. It's important then to keep our design flexible. There's still a lot of research to be done, but currently this is a short list of what's to come to CascadeCBDC:
+- Integration with CascadeChain for geo-replication and auditability.
+- API for issuing and redeeming external coins (e.g. for use in P2P transactions in blockchain platforms, through bridges or other protocols)
+- User-facing web service with wallet authentication and management
 
 ## Requirements
 
@@ -34,8 +65,6 @@ We assume the use of the docker image in the examples and instructions provided 
 - Cascade (https://github.com/Derecho-Project/cascade), branch `single_shard_multiobject_put` (the master branch won't work)
 - gzstream and zlib (in Ubuntu: `sudo apt install libgzstream-dev zlib1g-dev`)
 
-## Overview
-
 ## Setup
 This section will give instructions on how to compile and run CascadeCBDC in a basic deployment, with two Cascader servers and one client, all in the same host (in this case, a docker container running our image). In order to increase the number of servers/clients, or to run processes in multiples network nodes, see [Configuration options](#configuration-options).
 
@@ -48,7 +77,7 @@ root@cascade-cbdc:~/cascade-cbdc/build# cmake .. && make -j
 This will create the following in the `build` directory (we omit below other files that are not relevant):
 
 - `cfg`: folder containing the configuration files necessary to run Cascade server processes and a CascadeCBDC client
-    - `dfgs.json`: UDL configuration, containing all UDLs to be loaded by Cascade, how each one is triggered, and custom configuration options for each UDL. In CascadeCBDC, there is only one UDL that implements the CascadeCBDC service, with several options for performance tuning. This file must be the same for all server processes.
+    - `dfgs.json`: UDL configuration, containing all UDLs to be loaded by Cascade, how each one is triggered, and custom configuration options for each UDL. In CascadeCBDC, there is only one UDL that implements the CascadeCBDC core, with several options for performance tuning. This file must be the same for all server processes.
     - `layout.json`: this configures the layout of the deployment, i.e. how many shards and processes per shard, as well as the exact shard membership. This file must be the same for all server and client processes.
     - `udl_dlls.cfg`: this lists the shared libraries (containing UDLs) that should be loaded by the Cascade servers. This file must be the same for all server processes.
     - `n0`: folder containing configuration files to run a Cascader server with ID 0
@@ -61,7 +90,7 @@ This will create the following in the `build` directory (we omit below other fil
         - `derecho.cfg`: Cascade and Derecho configuration file, setting the process ID and network configuration (addresses,ports,protocols).
         - `dfgs.json`,`layout.json`,`udl_dlls.cfg`: links to the corresponding files in the parent folder.
         - `generate_workload`,`run_benchmark`,`metrics.py`: links to the executable in the `build` folder, for convenience.
-- `libcbdc_udl.so`: this shared library is loaded by all Cascade servers. It contains the UDL that implements the CascadeCBDC service.
+- `libcbdc_udl.so`: this shared library is loaded by all Cascade servers. It contains the UDL that implements the CascadeCBDC core.
 - `generate_workload`: this executable generates a workload used as input to `run_benchmark` (more details in [Benchmark tools](#benchmark-tools))
 - `run_benchmark`: this executable runs a benchmark using a given workload file (more details in [Benchmark tools](#benchmark-tools))
 - `metrics.py`: this script takes benchmark log outputs (from client and servers) and computes some simple metrics, such as throughput and latency breakdown (more details in [Benchmark tools](#benchmark-tools)).
@@ -339,7 +368,7 @@ In case you want to use RDMA instead of TCP, it is necessary to change the follo
 - `domain` must be set to the device name (taken from `ibv_devices`), e.g. `mlx5_1`.
 
 ### CascadeCBDC client configuration
-The `run_benchmark` executable provides many tuning options. The "send rate" (`-r`) option is the most important to note: it sets at which rate the client sends TXs to the CascadeCBDC service. The rate is set in TX per second. A rate of 0 means the client will send TXs as fast as possible. The example below sets the transfer rate to 10000 TX/s, which can be verified by the measurements reported by the `metrics.py` script ("real sending rate" and "throughput").
+The `run_benchmark` executable provides many tuning options. The "send rate" (`-r`) option is the most important to note: it sets at which rate the client sends TXs to the CascadeCBDC core. The rate is set in TX per second. A rate of 0 means the client will send TXs as fast as possible. The example below sets the transfer rate to 10000 TX/s, which can be verified by the measurements reported by the `metrics.py` script ("real sending rate" and "throughput").
 ```
 root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# ./run_benchmark -r 10000 20000_0_1_1_1_100000_10_3.gz 
 setting up ...
@@ -369,5 +398,5 @@ throughput: 9971.31 tx/s (9000 TXs in 0.90 seconds)
 e2e latency: avg  1.060 | std  0.247 | med  1.029 | min  0.448 | max  3.531 | p95  1.421 | p99  1.931
 ```
 
-### CascadeCBDC service configuration
-The CascadeCBDC service can be configured in the `dfgs.json` file. There are many tuning parameters, but the most important one to note here is `num_threads`. This sets the number of threads each process spawns to process TXs. We recommend between 4 and 8 threads. Note that in addition to these threads, the CascadeCBDC service also starts 3 other threads ("wallet persistence", "chaining", and "tx persistence") dedicated to other purposes. They can be deactivated through the parameters in `dfgs.json`, however performance will be decreased as a result.
+### CascadeCBDC core configuration
+The CascadeCBDC core can be configured in the `dfgs.json` file. There are many tuning parameters, but the most important one to note here is `num_threads`. This sets the number of threads each process spawns to process TXs. We recommend between 4 and 8 threads. Note that in addition to these threads, the CascadeCBDC core also starts 3 other threads ("wallet persistence", "chaining", and "tx persistence") dedicated to other purposes. They can be deactivated through the parameters in `dfgs.json`, however performance will be decreased as a result.
