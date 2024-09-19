@@ -31,12 +31,12 @@ Table of contents:
     - [CascadeCBDC core configuration](#cascadecbdc-client-configuration)
 
 ## Overview
-The diagram below show the high-level architecture of CascadeCBDC.
+The diagram below shows the high-level architecture of CascadeCBDC.
 ![image](architecture.png)
 
 CascadeCBDC is composed of multiple sites, which could be, for example, different countries participating in the same global CBDC system. Each site is responsible for maintaining a Cascade deployment (the core transaction processing system) and a user-facing web service in its own datacenter. All transactions are replicated across all sites by CascadeChain, providing a tamper-proof, digitally signed log that is also highly available. Users are directed to specific sites: in the example above, users sent requests to the country where their wallets were registered at.
 
-At each site, a web service receives requests from users. The web service is reponsible for autheticating the user, i.e. verifying if the user has the right to perform the requested operation. Operations are packaged by the web service as transaction and sent to the core system to be processed. The core system is implemented as a User Defined Logic (UDL) on top of the Cascade K/V store. The Cascade repo provides more details about the UDL framework, but essentially a UDL can be tought as a stored procedure that is triggered when certain objects in the K/V store are modified.
+At each site, a web service receives requests from users. The web service is responsible for authenticating the user, i.e. verifying if the user has the right to perform the requested operation. Operations are packaged by the web service as transaction and sent to the core system to be processed. The core system is implemented as a User Defined Logic (UDL) on top of the Cascade K/V store. The Cascade repo provides more details about the UDL framework, but essentially a UDL can be thought as a stored procedure that is triggered when certain objects in the K/V store are modified.
 
 The following requests can be made by a user:
 - Transfer funds from a set of wallets to another set of wallets
@@ -66,7 +66,7 @@ We assume the use of the docker image in the examples and instructions provided 
 - gzstream and zlib (in Ubuntu: `sudo apt install libgzstream-dev zlib1g-dev`)
 
 ## Setup
-This section will give instructions on how to compile and run CascadeCBDC in a basic deployment, with two Cascader servers and one client, all in the same host (in this case, a docker container running our image). In order to increase the number of servers/clients, or to run processes in multiples network nodes, see [Configuration options](#configuration-options).
+This section will give instructions on how to compile and run CascadeCBDC in a basic deployment, with two Cascade servers and one client, all in the same host (in this case, a docker container running our image). In order to increase the number of servers/clients, or to run processes in multiples network nodes, see [Configuration options](#configuration-options).
 
 ### Compilation
 ```
@@ -80,10 +80,10 @@ This will create the following in the `build` directory (we omit below other fil
     - `dfgs.json`: UDL configuration, containing all UDLs to be loaded by Cascade, how each one is triggered, and custom configuration options for each UDL. In CascadeCBDC, there is only one UDL that implements the CascadeCBDC core, with several options for performance tuning. This file must be the same for all server processes.
     - `layout.json`: this configures the layout of the deployment, i.e. how many shards and processes per shard, as well as the exact shard membership. This file must be the same for all server and client processes.
     - `udl_dlls.cfg`: this lists the shared libraries (containing UDLs) that should be loaded by the Cascade servers. This file must be the same for all server processes.
-    - `n0`: folder containing configuration files to run a Cascader server with ID 0
+    - `n0`: folder containing configuration files to run a Cascade server with ID 0
         - `derecho.cfg`: Cascade and Derecho configuration file, setting the process ID and network configuration (addresses,ports,protocols).
         - `dfgs.json`,`layout.json`,`udl_dlls.cfg`: links to the corresponding files in the parent folder.
-    - `n1`: folder containing configuration files to run Cascader server with ID 1
+    - `n1`: folder containing configuration files to run Cascade server with ID 1
         - `derecho.cfg`: Cascade and Derecho configuration file, setting the process ID and network configuration (addresses,ports,protocols).
         - `dfgs.json`,`layout.json`,`udl_dlls.cfg`: links to the corresponding files in the parent folder.
     - `client`: folder containing configuration files to run a CascadeCBDC client
@@ -97,7 +97,7 @@ This will create the following in the `build` directory (we omit below other fil
 - `setup_config.sh`: this script generates, in the `cfg` folder, the necessary configuration files for a given number of shards and processes per shard. More details in [Configuration options](#configuration-options).
 
 ### Starting the service
-To start the service, it's necessary to run two instances of `cascade_server`: one in the `cfg/n0` folder and another in the `cfg/n1` folder. The first process is the Cascade metadata service, and the second constitues the single shard (with a single process) of the CascadeCBDC service. Example:
+To start the service, it's necessary to run two instances of `cascade_server`: one in the `cfg/n0` folder and another in the `cfg/n1` folder. The first process is the Cascade metadata service, and the second constitutes the single shard (with a single process) of the CascadeCBDC service. Example:
 <table>
 <tr>
 <th>@~/cascade-cbdc/build/cfg/n0</th>
@@ -161,7 +161,7 @@ Your are ready now to run CascadeCBDC! See below how to use the benchmark tools.
 ## Benchmark tools
 Three tools are currently provided, in the form of three executables: `generate_workload`, `run_benchmark`, and `metrics.py`. These tools only evaluate transaction processing in a local deployment. WAN replication is not implemented yet.
 
-A workload file should first be generated using `generate_workload`. A workload consists of a set of transfers to be performed between wallets. `run_benchmark` executes a given workload and generate log files containing several timestamps. The `metrics.py` script computes metrics based on the generated log files. More defails on each tool below.
+A workload file should first be generated using `generate_workload`. A workload consists of a set of transfers to be performed between wallets. `run_benchmark` executes a given workload and generate log files containing several timestamps. The `metrics.py` script computes metrics based on the generated log files. More details on each tool below.
 
 ### Generating benchmark workload
 The `generate_workload` executable generates a workload that can be used to run a benchmark. The workload is saved in a zipped file.
@@ -181,7 +181,7 @@ options:
  -h				show this help
 ```
 
-The default name of the output file is a concatenation of all parameters, with the extension `.gz`. The generated file can be seen uzing `zcat`. For example:
+The default name of the output file is a concatenation of all parameters, with the extension `.gz`. The generated file can be seen using `zcat`. For example:
 ```
 root@cascade-cbdc:~/cascade-cbdc/build/cfg/client# ./generate_workload -w 4
 parameters:
@@ -356,7 +356,7 @@ For starting the service in this case, it is necessary to run `cascade_server` i
 
 #### Multiple nodes in a network
 In case you want to deploy Cascade servers and clients on separate nodes in a network, it is necessary to change `derecho.cfg` with the appropriate network configuration for all processes. Three configurations in the file must be changed:
-- `contact_ip`: this must be set to the IP address of the process with ID 0 (the one using the ocnfig files in the `n0` folder).
+- `contact_ip`: this must be set to the IP address of the process with ID 0 (the one using the config files in the `n0` folder).
 - `local_ip`: this must be set to the local IP address of the process. Other processes will use this address to communicate with this process.
 - `domain`: this must be set to network interface to be used (taken from `ifconfig`), e.g. `eth0`.
 
