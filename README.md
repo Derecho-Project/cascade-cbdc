@@ -60,8 +60,16 @@ $ sudo docker run -d --hostname cascade-cbdc --name cascade-cbdc -it tgarr/casca
 $ sudo docker exec -w /root -it cascade-cbdc /bin/bash -l
 ```
 
-We assume the use of the docker image in the examples and instructions provided in this document. In case you do not wish to use it, the following is required to compile and run CascadeCBDC:
+In case you get a `Cannot allocate memory` error when starting Cascade, this is due to limits enforced by the Linux kernel. It is necessary to run the following command in the host system (not in the container):
+```
+$ sudo sysctl -w vm.overcommit_memory=1
+```
+In order to make this permanent (for when the system restarts), run the following command:
+```
+$ echo "vm.overcommit_memory = 1" | sudo tee /etc/sysctl.d/20-derecho.conf
+```
 
+We assume the use of the docker image in the examples and instructions provided in this document. In case you do not wish to use it, the following is required to compile and run CascadeCBDC:
 - Cascade (https://github.com/Derecho-Project/cascade), branch `single_shard_multiobject_put` (the master branch won't work)
 - gzstream and zlib (in Ubuntu: `sudo apt install libgzstream-dev zlib1g-dev`)
 
