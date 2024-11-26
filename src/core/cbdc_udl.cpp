@@ -1133,10 +1133,12 @@ void CascadeCBDC::TXPersistenceThread::main_loop(){
     if(!running) return;
    
     // thread main loop 
-    std::unordered_map<uint32_t,internal_transaction_t**> to_persist;
+    std::unordered_map<uint32_t, std::vector<internal_transaction_t*>> to_persist;
     std::unordered_map<uint32_t,std::chrono::steady_clock::time_point> wait_time;
     auto batch_time = std::chrono::microseconds(udl->config.tx_persistence_batch_time_us);
-    while(true){
+
+    size_t curr_batch_size = 0;
+    while(running){
         std::unique_lock<std::mutex> lock(thread_mtx);
         bool empty = true;
         for(auto& item : tx_queues){
@@ -1151,25 +1153,31 @@ void CascadeCBDC::TXPersistenceThread::main_loop(){
 
         std::unordered_map<uint32_t,uint64_t> persist_count;
         auto now = std::chrono::steady_clock::now();
+
+        // while (true) {
         for(auto& item : tx_queues){
             auto& shard = item.first;
             auto& queue = item.second;
 
+            if(queue.empty()) continue;
             if(to_persist.count(shard) == 0){
-                to_persist[shard] = new internal_transaction_t*[udl->config.tx_persistence_batch_max_size];
+                to_persist[shard] = std::vector<internal_transaction_t*>();
                 wait_time[shard] = now;
             }
-        
-            uint64_t queued_count = queue.size();
-            if((queued_count >= udl->config.tx_persistence_batch_min_size) || ((now-wait_time[shard]) >= batch_time)){
-                persist_count[shard] = std::min(queued_count,udl->config.tx_persistence_batch_max_size);
-                wait_time[shard] = now;
-            
-                // copy out wallets
-                for(uint64_t i=0;i<persist_count[shard];i++){
-                    to_persist[shard][i] = queue.front();
-                    queue.pop();
+
+            if(!queue.empty() && 
+                  curr_batch_size < udl->config.tx_persistence_batch_max_size ||
+                  (now - wait_time[shard] >= batch_time)) {
+
+                std::size_t tx_size = mutils::bytes_size(queue.front());
+                
+                if(curr_batch_size + tx_size >= udl->config.tx_persistence_batch_max_size){
+                    break;
                 }
+                to_persist[shard].push_back(queue.front());
+                curr_batch_size += tx_size;
+                persist_count[shard] = to_persist[shard].size();
+                queue.pop();
             }
         }
         
@@ -1184,7 +1192,7 @@ void CascadeCBDC::TXPersistenceThread::main_loop(){
                 continue;
             }
 
-            auto txs = to_persist[shard];
+            auto& txs = to_persist[shard];
 
             std::vector<ObjectWithStringKey> objects;
             objects.reserve(count);
@@ -1204,7 +1212,14 @@ void CascadeCBDC::TXPersistenceThread::main_loop(){
 
             TimestampLogger::log(CBDC_TAG_UDL_TX_BATCHING,node_id,objects.size(),shard);
             capi.put_objects_and_forget<CBDC_OBJECT_POOL_TYPE>(objects,CBDC_OBJECT_POOL_SUBGROUP,shard);
+
+            // Clear the vector for next batch
+            txs.clear();
         }
+
+        // Reset batch size after processing
+        curr_batch_size = 0;
+        persist_count.clear();
     }
 }
 
