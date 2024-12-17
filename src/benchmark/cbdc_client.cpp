@@ -250,44 +250,52 @@ void CascadeCBDC::ClientThread::main_loop(){
     if(!running) return;
    
     // thread main loop 
-    std::unordered_map<uint32_t,queued_request_t*> to_persist;
+    // std::unordered_map<uint32_t,queued_request_t*> to_persist;
+    std::unordered_map<uint32_t,std::vector<queued_request_t>> to_persist;
     std::unordered_map<uint32_t,std::chrono::steady_clock::time_point> wait_time;
     auto batch_time = std::chrono::microseconds(batch_time_us);
-    while(true){
+    // size_t curr_batch_size = 0;
+    while(running){
         std::unique_lock<std::mutex> lock(thread_mtx);
         bool empty = true;
-        for(auto& item : request_queues){
+        for(auto& item : request_queues) {
             empty = empty && item.second.empty();
         }
-
-        if(empty){
-            thread_signal.wait_for(lock,batch_time);
+        
+        if(empty) {
+            thread_signal.wait_for(lock, batch_time);
+            if(!running) break;
         }
-
-        if(!running) break;
 
         std::unordered_map<uint32_t,uint64_t> persist_count;
         auto now = std::chrono::steady_clock::now();
-        for(auto& item : request_queues){
+
+        // Process one request per shard per iteration
+        for(auto& item : request_queues) {
             auto& shard = item.first;
             auto& queue = item.second;
 
-            if(to_persist.count(shard) == 0){
-                to_persist[shard] = new queued_request_t[batch_max_size];
+            if(to_persist.count(shard) == 0) {
+                to_persist[shard] = std::vector<queued_request_t>();
+                to_persist[shard].reserve(batch_max_size);
                 wait_time[shard] = now;
             }
         
-            uint64_t queued_count = queue.size();
-            if((queued_count >= batch_min_size) || ((now-wait_time[shard]) >= batch_time)){
-                persist_count[shard] = std::min(queued_count,batch_max_size);
-                wait_time[shard] = now;
-            
-                // copy out wallets
-                for(uint64_t i=0;i<persist_count[shard];i++){
-                    to_persist[shard][i] = queue.front();
-                    queue.pop();
+            // Process if we hit minimum batch size or timeout
+            if(!queue.empty() && 
+               (queue.size() >= batch_min_size || 
+                (now - wait_time[shard]) >= batch_time)) {
+                
+                // Only take one request per iteration for fairness
+                to_persist[shard].push_back(queue.front());
+                persist_count[shard] = to_persist[shard].size();
+                queue.pop();
+
+                // Reset wait time if we've hit batch size
+                if(persist_count[shard] >= batch_max_size) {
+                    wait_time[shard] = now;
                 }
-            }
+            } 
         }
         
         lock.unlock();
@@ -301,7 +309,7 @@ void CascadeCBDC::ClientThread::main_loop(){
                 continue;
             }
 
-            auto requests = to_persist[shard];
+            auto& requests = to_persist[shard];
 
             std::vector<ObjectWithStringKey> objects;
             objects.reserve(count);
@@ -346,7 +354,12 @@ void CascadeCBDC::ClientThread::main_loop(){
             for(auto& obj : objects){
                 TimestampLogger::log(CBDC_TAG_CLIENT_TRANSFER_SENT,node_id,obj.message_id,0);
             }
+
+            // Clear processed requests
+            requests.clear();
         }
+        // Reset for next batch
+        persist_count.clear();
     }
 }
 

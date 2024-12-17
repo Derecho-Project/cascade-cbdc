@@ -937,10 +937,13 @@ void CascadeCBDC::WalletPersistenceThread::main_loop(){
     if(!running) return;
    
     // thread main loop 
-    queued_wallet_t to_persist[udl->config.wallet_persistence_batch_max_size];
+    // queued_wallet_t to_persist[udl->config.wallet_persistence_batch_max_size];
+    std::vector<queued_wallet_t> to_persist;
     auto wait_start = std::chrono::steady_clock::now();
     auto batch_time = std::chrono::microseconds(udl->config.wallet_persistence_batch_time_us);
-    while(true){
+    size_t curr_batch_size = 0;
+
+    while(running){
         std::unique_lock<std::mutex> lock(thread_mtx);
         if(wallet_queue.empty()){
             thread_signal.wait_for(lock,batch_time);
@@ -949,13 +952,19 @@ void CascadeCBDC::WalletPersistenceThread::main_loop(){
         if(!running) break;
 
         uint64_t persist_count = 0;
-        uint64_t queued_count = wallet_queue.size();
+        // uint64_t queued_count = wallet_queue.size();
         auto now = std::chrono::steady_clock::now();
 
-        if((queued_count >= udl->config.wallet_persistence_batch_min_size) || ((now-wait_start) >= batch_time)){
-            persist_count = std::min(queued_count,udl->config.wallet_persistence_batch_max_size);
-            wait_start = now;
-        
+        if(!wallet_queue.empty() &&
+            (curr_batch_size < udl->config.wallet_persistence_batch_min_size) || 
+            ((now-wait_start) >= batch_time)) {
+            std::size_t wallet_size = mutils::bytes_size(std::get<1>(wallet_queue.front()));
+            if (curr_batch_size + wallet_size < udl->config.wallet_persistence_batch_min_size){
+                to_persist.push_back(wallet_queue.front());
+                curr_batch_size += wallet_size;
+                persist_count = to_persist.size();
+                wallet_queue.pop();
+            }
             // copy out wallets
             for(uint64_t i=0;i<persist_count;i++){
                 to_persist[i] = wallet_queue.front();
@@ -987,6 +996,10 @@ void CascadeCBDC::WalletPersistenceThread::main_loop(){
             TimestampLogger::log(CBDC_TAG_UDL_WALLET_BATCHING,node_id,objects.size(),0);
             capi.put_objects_and_forget(objects);
         }
+        
+        // Reset for next batch
+        curr_batch_size = 0;
+        to_persist.clear();
     }
 }
 
@@ -1017,10 +1030,13 @@ void CascadeCBDC::ChainingThread::main_loop(){
     if(!running) return;
    
     // thread main loop 
-    std::unordered_map<uint32_t,queued_chain_t*> to_persist;
+    // std::unordered_map<uint32_t,queued_chain_t*> to_persist;
+    std::unordered_map<uint32_t,std::vector<queued_chain_t*>> to_persist;
     std::unordered_map<uint32_t,std::chrono::steady_clock::time_point> wait_time;
     auto batch_time = std::chrono::microseconds(udl->config.chaining_batch_time_us);
-    while(true){
+    size_t curr_batch_size = 0;
+    // while(true){
+    while(running){
         std::unique_lock<std::mutex> lock(thread_mtx);
         bool empty = true;
         for(auto& item : chain_queues){
@@ -1039,21 +1055,31 @@ void CascadeCBDC::ChainingThread::main_loop(){
             auto& shard = item.first;
             auto& queue = item.second;
 
+            if (queue.empty()) continue;
+
             if(to_persist.count(shard) == 0){
-                to_persist[shard] = new queued_chain_t[udl->config.chaining_batch_max_size];
+                // to_persist[shard] = new queued_chain_t[udl->config.chaining_batch_max_size];
+                to_persist[shard] = std::vector<queued_chain_t*>();
                 wait_time[shard] = now;
             }
         
             uint64_t queued_count = queue.size();
-            if((queued_count >= udl->config.chaining_batch_min_size) || ((now-wait_time[shard]) >= batch_time)){
-                persist_count[shard] = std::min(queued_count,udl->config.chaining_batch_max_size);
-                wait_time[shard] = now;
-            
-                // copy out wallets
-                for(uint64_t i=0;i<persist_count[shard];i++){
-                    to_persist[shard][i] = queue.front();
-                    queue.pop();
-                }
+            // if((queued_count >= udl->config.chaining_batch_min_size) || ((now-wait_time[shard]) >= batch_time)){
+            if(!queue.empty() && 
+                curr_batch_size < udl->config.chaining_batch_max_size ||
+                (now - wait_time[shard] >= batch_time)) {
+
+                std::size_t tx_size = mutils::bytes_size(queue.front());
+
+                if(curr_batch_size + tx_size >= udl->config.tx_persistence_batch_max_size)
+                    break; 
+
+                // to_persist[shard].push_back(*queue.front());
+                queued_chain_t* chain_ptr = new queued_chain_t(queue.front());
+                to_persist[shard].push_back(chain_ptr);
+                curr_batch_size += tx_size;
+                persist_count[shard] = to_persist[shard].size();
+                queue.pop();
             }
         }
         
@@ -1068,16 +1094,16 @@ void CascadeCBDC::ChainingThread::main_loop(){
                 continue;
             }
 
-            auto chains = to_persist[shard];
+            auto& chains = to_persist[shard];
 
             std::vector<ObjectWithStringKey> objects;
             objects.reserve(count);
 
             for(uint64_t i=0;i<count;i++){
                 auto& queued_chain = chains[i];
-                auto& operation = std::get<0>(queued_chain);
-                auto& wallet_id = std::get<1>(queued_chain);
-                auto request = std::get<2>(queued_chain);
+                auto& operation = std::get<0>(*queued_chain);
+                auto& wallet_id = std::get<1>(*queued_chain);
+                auto request = std::get<2>(*queued_chain);
                 auto& txid = std::get<0>(*request);
 
                 if(operation == operation_type_t::FORWARD){ // forward
@@ -1085,7 +1111,7 @@ void CascadeCBDC::ChainingThread::main_loop(){
                     uint8_t* buffer = new uint8_t[sz];
                     mutils::to_bytes(*request, buffer);
                     objects.emplace_back(CBDC_BUILD_FORWARD_KEY(wallet_id),Blob(buffer,sz));
-                } else {                    
+                } else {
                     cbdc_request_t dummy_request(txid,{},{},{});
                     std::size_t sz = mutils::bytes_size(dummy_request);
                     uint8_t* buffer = new uint8_t[sz];
@@ -1103,7 +1129,10 @@ void CascadeCBDC::ChainingThread::main_loop(){
 
             TimestampLogger::log(CBDC_TAG_UDL_CHAIN_BATCHING,node_id,objects.size(),shard);
             capi.put_objects_and_forget<CBDC_OBJECT_POOL_TYPE>(objects,CBDC_OBJECT_POOL_SUBGROUP,shard,true);
+            chains.clear();
         }
+        curr_batch_size = 0;
+        persist_count.clear();
     }
 }
 
@@ -1133,10 +1162,12 @@ void CascadeCBDC::TXPersistenceThread::main_loop(){
     if(!running) return;
    
     // thread main loop 
-    std::unordered_map<uint32_t,internal_transaction_t**> to_persist;
+    std::unordered_map<uint32_t, std::vector<internal_transaction_t*>> to_persist;
     std::unordered_map<uint32_t,std::chrono::steady_clock::time_point> wait_time;
     auto batch_time = std::chrono::microseconds(udl->config.tx_persistence_batch_time_us);
-    while(true){
+
+    size_t curr_batch_size = 0;
+    while(running){
         std::unique_lock<std::mutex> lock(thread_mtx);
         bool empty = true;
         for(auto& item : tx_queues){
@@ -1151,25 +1182,31 @@ void CascadeCBDC::TXPersistenceThread::main_loop(){
 
         std::unordered_map<uint32_t,uint64_t> persist_count;
         auto now = std::chrono::steady_clock::now();
+
+        // while (true) {
         for(auto& item : tx_queues){
             auto& shard = item.first;
             auto& queue = item.second;
 
+            if(queue.empty()) continue;
             if(to_persist.count(shard) == 0){
-                to_persist[shard] = new internal_transaction_t*[udl->config.tx_persistence_batch_max_size];
+                to_persist[shard] = std::vector<internal_transaction_t*>();
                 wait_time[shard] = now;
             }
-        
-            uint64_t queued_count = queue.size();
-            if((queued_count >= udl->config.tx_persistence_batch_min_size) || ((now-wait_time[shard]) >= batch_time)){
-                persist_count[shard] = std::min(queued_count,udl->config.tx_persistence_batch_max_size);
-                wait_time[shard] = now;
-            
-                // copy out wallets
-                for(uint64_t i=0;i<persist_count[shard];i++){
-                    to_persist[shard][i] = queue.front();
-                    queue.pop();
+
+            if(!queue.empty() && 
+                  curr_batch_size < udl->config.tx_persistence_batch_max_size ||
+                  (now - wait_time[shard] >= batch_time)) {
+
+                std::size_t tx_size = mutils::bytes_size(queue.front());
+                
+                if(curr_batch_size + tx_size >= udl->config.tx_persistence_batch_max_size){
+                    break;
                 }
+                to_persist[shard].push_back(queue.front());
+                curr_batch_size += tx_size;
+                persist_count[shard] = to_persist[shard].size();
+                queue.pop();
             }
         }
         
@@ -1184,7 +1221,7 @@ void CascadeCBDC::TXPersistenceThread::main_loop(){
                 continue;
             }
 
-            auto txs = to_persist[shard];
+            auto& txs = to_persist[shard];
 
             std::vector<ObjectWithStringKey> objects;
             objects.reserve(count);
@@ -1204,7 +1241,14 @@ void CascadeCBDC::TXPersistenceThread::main_loop(){
 
             TimestampLogger::log(CBDC_TAG_UDL_TX_BATCHING,node_id,objects.size(),shard);
             capi.put_objects_and_forget<CBDC_OBJECT_POOL_TYPE>(objects,CBDC_OBJECT_POOL_SUBGROUP,shard);
+
+            // Clear the vector for next batch
+            txs.clear();
         }
+
+        // Reset batch size after processing
+        curr_batch_size = 0;
+        persist_count.clear();
     }
 }
 
