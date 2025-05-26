@@ -38,7 +38,7 @@ void CascadeCBDC::setup(uint64_t batch_min_size,uint64_t batch_max_size,uint64_t
         for (auto& reply_future : res.get()){
             auto& obj = reply_future.second.get();
 
-            if(obj.version != INVALID_VERSION){
+            if(obj.version != persistent::INVALID_VERSION){
                 config = *mutils::from_bytes<cascade_cbdc_config_t>(nullptr,obj.blob.bytes);
                 retrieved = true;
             }
@@ -176,7 +176,7 @@ wallet_t CascadeCBDC::get_wallet(wallet_id_t wallet_id){
     for (auto& reply_future : res.get()){
         auto& obj = reply_future.second.get();
 
-        if(obj.version != INVALID_VERSION){
+        if(obj.version != persistent::INVALID_VERSION){
             return *mutils::from_bytes<wallet_t>(nullptr,obj.blob.bytes);
         }
     }
@@ -190,7 +190,7 @@ transaction_status_t CascadeCBDC::get_status(const transaction_id_t& txid){
     for (auto& reply_future : res.get()){
         auto& obj = reply_future.second.get();
 
-        if(obj.version != INVALID_VERSION){
+        if(obj.version != persistent::INVALID_VERSION){
             TimestampLogger::log(CBDC_TAG_CLIENT_STATUS,my_id,txid,obj.version);
             return std::get<1>(*mutils::from_bytes<transaction_t>(nullptr,obj.blob.bytes));
         }

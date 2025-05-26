@@ -6,7 +6,7 @@
                                 "min_nodes_by_shard": ["1"],
                                 "max_nodes_by_shard": ["1"],
                                 "delivery_modes_by_shard": ["Ordered"],
-                                "reserved_node_ids_by_shard": [["0"]],
+                                "reserved_node_ids_by_shard": [["5"]],
                                 "profiles_by_shard": ["DEFAULT"]
                             }
                         ]
@@ -18,7 +18,7 @@
                                 "min_nodes_by_shard": ["1"],
                                 "max_nodes_by_shard": ["1"],
                                 "delivery_modes_by_shard": ["Ordered"],
-                                "reserved_node_ids_by_shard": [["1"]],
+                                "reserved_node_ids_by_shard": [["5"]],
                                 "profiles_by_shard": ["DEFAULT"]
                             }
                         ]
@@ -27,11 +27,23 @@
         "type_alias":   "PersistentCascadeStoreWithStringKey",
         "layout":       [
                             {
-                                "min_nodes_by_shard": [XXX_MIN_NODES_XXX],
-                                "max_nodes_by_shard": [XXX_MAX_NODES_XXX],
-                                "delivery_modes_by_shard": [XXX_DELIVERY_MODES_XXX],
-                                "reserved_node_ids_by_shard": [XXX_RESERVED_IDS_XXX],
-                                "profiles_by_shard": [XXX_PROFILES_XXX]
+                                "min_nodes_by_shard": ["1"],
+                                "max_nodes_by_shard": ["2"],
+                                "delivery_modes_by_shard": ["Ordered"],
+                                "reserved_node_ids_by_shard": [["5"]],
+                                "profiles_by_shard": ["DEFAULT"]
+                            }
+                        ]
+    },
+    {
+        "type_alias":   "SignatureCascadeStoreWithStringKey",
+        "layout":       [
+                            {
+                                "min_nodes_by_shard": ["1"],
+                                "max_nodes_by_shard": ["2"],
+                                "delivery_modes_by_shard": ["Ordered"],
+                                "reserved_node_ids_by_shard": [["6", "7"]],
+                                "profiles_by_shard": ["DEFAULT"]
                             }
                         ]
     },
@@ -41,10 +53,11 @@
                             {
                                 "min_nodes_by_shard": ["1"],
                                 "max_nodes_by_shard": ["1"],
-                                "delivery_modes_by_shard": ["Raw"],
-                                "reserved_node_ids_by_shard": [["1"]],
+                                "delivery_modes_by_shard": ["Ordered"],
+                                "reserved_node_ids_by_shard": [["5"]],
                                 "profiles_by_shard": ["DEFAULT"]
                             }
                         ]
     }
-]'
+]
+
