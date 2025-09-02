@@ -183,7 +183,7 @@ void CascadeCBDC::reset(){
     TimestampLogger::clear();
 }
 
-void CascadeCBDC::ocdpo_handler(
+void CascadeCBDC::ocdpo_handler( // of critical data path function
         const node_id_t             sender,
         const std::string&          object_pool_pathname,
         const std::string&          key_string,
@@ -202,6 +202,7 @@ void CascadeCBDC::ocdpo_handler(
         return;
     }
     
+    std::cout <<"[DEBUG] Key String: "<< key_string <<std::endl;
     if(key_string == "init"){ // write UDL config so clients can get it
         auto shard_index = typed_ctxt->get_service_client_ref().get_my_shard<CBDC_OBJECT_POOL_TYPE>(CBDC_OBJECT_POOL_SUBGROUP);
         auto shard = typed_ctxt->get_service_client_ref().get_shard_members<CBDC_OBJECT_POOL_TYPE>(CBDC_OBJECT_POOL_SUBGROUP,shard_index);
@@ -215,6 +216,7 @@ void CascadeCBDC::ocdpo_handler(
                     return mutils::to_bytes(config, buffer);
                 },mutils::bytes_size(config));
 
+            std::cout << "[DEBUG] Doing a put with: " << obj.key << std::endl;
             typed_ctxt->get_service_client_ref().put_and_forget(obj);
         }
         return;
@@ -225,7 +227,8 @@ void CascadeCBDC::ocdpo_handler(
     wallet_id_t wallet_id = std::stoull(key_string.substr(key_string.find("_")+1));
     operation_type_t operation = operation_str_to_type(operation_str);
     auto request = mutils::from_bytes<cbdc_request_t>(nullptr,object.blob.bytes).release();
-    transaction_id_t txid = std::get<0>(*request);
+    // transaction_id_t txid = std::get<0>(*request);
+    transaction_id_t txid = request->Body.txid;
     
     TimestampLogger::log(CBDC_TAG_UDL_HANDLER_START,my_id,txid,wallet_id);
     
@@ -343,10 +346,10 @@ void CascadeCBDC::CBDCThread::main_loop(){
         auto tx = std::get<2>(*queued_op);
         auto request = tx->request;
 
-        auto& txid = std::get<0>(*request);
-        auto& sources = std::get<1>(*request);
-        auto& destinations = std::get<2>(*request);
-        auto& wallets = std::get<3>(*request);
+        auto& txid = request->Body.txid;
+        auto& sources = request->Body.senders;
+        auto& destinations = request->Body.receivers;
+        auto& wallets = request->Body.sorted_wallets;
 
         // check if this txid for this wallet_id was already received before: if yes, ignore
         if(already_handled[tx][wallet_id][operation]){
@@ -404,8 +407,8 @@ void CascadeCBDC::CBDCThread::enqueue_transaction(internal_transaction_t* tx,wal
     pending_wallets[tx].push_back(wallet_id);
     
     auto request = tx->request;
-    auto& sources = std::get<1>(*request);
-    auto& destinations = std::get<2>(*request);
+    auto& sources = request->Body.senders;
+    auto& destinations = request->Body.receivers;
 
     if(pending_transaction_it.count(tx) > 0){
         return;
@@ -466,8 +469,8 @@ bool CascadeCBDC::CBDCThread::dequeue_transaction(internal_transaction_t* tx,wal
         pending_wallets.erase(tx);
     
         auto request = tx->request;
-        auto& sources = std::get<1>(*request);
-        auto& destinations = std::get<2>(*request);
+        auto& sources = request->Body.senders;
+        auto& destinations = request->Body.receivers;
 
         // update the map for general conflict checking
         for(auto& src : sources){
@@ -488,7 +491,7 @@ bool CascadeCBDC::CBDCThread::has_conflict(internal_transaction_t* tx,wallet_id_
 
 bool CascadeCBDC::CBDCThread::is_valid(internal_transaction_t* tx,wallet_id_t wallet_id){
     auto request = tx->request;
-    auto& sources = std::get<1>(*request);
+    auto& sources = request->Body.senders;
    
     // a transaction only fails if there are not enough coins in a source wallet 
     if(sources.count(wallet_id) > 0){
@@ -502,8 +505,8 @@ bool CascadeCBDC::CBDCThread::is_valid(internal_transaction_t* tx,wallet_id_t wa
 
 void CascadeCBDC::CBDCThread::tx_run_recursive(internal_transaction_t* tx,wallet_id_t wallet_id){
     auto request = tx->request;
-    auto& sources = std::get<1>(*request);
-    auto& wallets = std::get<3>(*request);
+    auto& sources = request->Body.senders;
+    auto& wallets = request->Body.sorted_wallets;
 
     tx->status = transaction_status_t::RUNNING;
 
@@ -528,7 +531,7 @@ void CascadeCBDC::CBDCThread::tx_run_recursive(internal_transaction_t* tx,wallet
 
 void CascadeCBDC::CBDCThread::tx_committed_recursive(internal_transaction_t* tx,wallet_id_t wallet_id){
     auto request = tx->request;
-    auto& wallets = std::get<3>(*request);
+    auto& wallets = request->Body.sorted_wallets;
     
     tx->status = transaction_status_t::COMMIT;
     commit_transaction(tx,wallet_id);
@@ -570,8 +573,8 @@ void CascadeCBDC::CBDCThread::tx_committed_recursive(internal_transaction_t* tx,
 
 void CascadeCBDC::CBDCThread::tx_aborted_recursive(internal_transaction_t* tx,wallet_id_t wallet_id,bool adjust_virtual){
     auto request = tx->request;
-    auto& sources = std::get<1>(*request);
-    auto& wallets = std::get<3>(*request);
+    auto& sources = request->Body.senders;
+    auto& wallets = request->Body.sorted_wallets;
 
     tx->status = transaction_status_t::ABORT;
     if(adjust_virtual && (sources.count(wallet_id) > 0)){
@@ -615,8 +618,8 @@ void CascadeCBDC::CBDCThread::tx_aborted_recursive(internal_transaction_t* tx,wa
 
 void CascadeCBDC::CBDCThread::commit_transaction(internal_transaction_t* tx,wallet_id_t wallet_id){
     auto request = tx->request;
-    auto& sources = std::get<1>(*request);
-    auto& destinations = std::get<2>(*request);
+    auto& sources = request->Body.senders;
+    auto& destinations = request->Body.receivers;
     auto& wallet = wallet_cache[wallet_id];
 
     // add coins
@@ -668,8 +671,8 @@ bool CascadeCBDC::CBDCThread::is_my_persistence(uint64_t factor){
 
 void CascadeCBDC::CBDCThread::send_tx_forward(internal_transaction_t* tx,wallet_id_t wallet_id){
     auto request = tx->request;
-    auto& txid = std::get<0>(*request);
-    auto& wallets = std::get<3>(*request);
+    auto& txid = request->Body.txid;
+    auto& wallets = request->Body.sorted_wallets;
 
     // next wallet
     auto it = std::find(wallets.begin(),wallets.end(),wallet_id);
@@ -725,8 +728,8 @@ void CascadeCBDC::CBDCThread::send_tx_forward(internal_transaction_t* tx,wallet_
 void CascadeCBDC::CBDCThread::send_status_backward(internal_transaction_t* tx,wallet_id_t wallet_id){
     // this node is responsible for chaining the tx, proceed
     auto request = tx->request;
-    auto& txid = std::get<0>(*request);
-    auto& wallets = std::get<3>(*request);
+    auto& txid = request->Body.txid;
+    auto& wallets = request->Body.sorted_wallets;
 
     // next wallet
     auto it = std::find(wallets.begin(),wallets.end(),wallet_id);
@@ -779,7 +782,9 @@ void CascadeCBDC::CBDCThread::send_status_backward(internal_transaction_t* tx,wa
         return;
     }
 
-    cbdc_request_t dummy_request(txid,{},{},{});
+    cbdc_request_t::body dummy_req_body(txid,{},{},{});
+
+    cbdc_request_t dummy_request(std::move(dummy_req_body), cbdc_request_t::hash_body(dummy_req_body));
     obj.blob = Blob([&dummy_request](uint8_t* buffer,const std::size_t size){
             return mutils::to_bytes(dummy_request, buffer);
         },mutils::bytes_size(dummy_request));
@@ -836,7 +841,7 @@ coin_value_t CascadeCBDC::CBDCThread::remove_from_wallet(wallet_t &wallet,coin_v
 void CascadeCBDC::CBDCThread::persist_wallet(wallet_id_t wallet_id,internal_transaction_t* tx){
     auto& wallet = wallet_cache[wallet_id];
     auto request = tx->request;
-    auto& txid = std::get<0>(*request);
+    auto& txid = request->Body.txid;
 
     // check if this node is responsible for this persistence
     //if(!is_my_persistence(wallet_id)){
@@ -873,7 +878,7 @@ void CascadeCBDC::CBDCThread::persist_wallet(wallet_id_t wallet_id,internal_tran
 // transaction persistence: happens after the first wallet commits or aborts
 void CascadeCBDC::CBDCThread::persist_transaction(internal_transaction_t* tx){
     auto request = tx->request;
-    auto& txid = std::get<0>(*request);
+    auto& txid = request->Body.txid;
     
     // check if this node is responsible for this persistence
     //if(!is_my_persistence(txid)){
@@ -1104,7 +1109,7 @@ void CascadeCBDC::ChainingThread::main_loop(){
                 auto& operation = std::get<0>(*queued_chain);
                 auto& wallet_id = std::get<1>(*queued_chain);
                 auto request = std::get<2>(*queued_chain);
-                auto& txid = std::get<0>(*request);
+                auto& txid = request->Body.txid;
 
                 if(operation == operation_type_t::FORWARD){ // forward
                     std::size_t sz = mutils::bytes_size(*request);
@@ -1112,7 +1117,9 @@ void CascadeCBDC::ChainingThread::main_loop(){
                     mutils::to_bytes(*request, buffer);
                     objects.emplace_back(CBDC_BUILD_FORWARD_KEY(wallet_id),Blob(buffer,sz));
                 } else {
-                    cbdc_request_t dummy_request(txid,{},{},{});
+                    cbdc_request_t::body dummy_body_request(txid,{},{},{});
+                    cbdc_request_t dummy_request(std::move(dummy_body_request), 
+                                                 cbdc_request_t::hash_body(dummy_body_request));
                     std::size_t sz = mutils::bytes_size(dummy_request);
                     uint8_t* buffer = new uint8_t[sz];
                     mutils::to_bytes(dummy_request, buffer);
@@ -1229,7 +1236,7 @@ void CascadeCBDC::TXPersistenceThread::main_loop(){
             for(uint64_t i=0;i<count;i++){
                 auto queued_tx = txs[i];
                 auto request = queued_tx->request;
-                auto& txid = std::get<0>(*request);
+                auto& txid = request->Body.txid;
                 transaction_t persisted_tx(*request,queued_tx->status);
    
                 std::size_t sz = mutils::bytes_size(persisted_tx);

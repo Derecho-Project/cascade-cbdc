@@ -6,13 +6,56 @@
 #include <unordered_map>
 #include <string>
 #include <vector>
+#include <derecho/openssl/hash.hpp>
+#include <derecho/openssl/signature.hpp>
+#include <derecho/mutils-serialization/SerializationSupport.hpp>
 
 // basic CBDC types
 using wallet_id_t = uint64_t;
 using coin_value_t = uint64_t;
 using wallet_t = coin_value_t; // TODO use separate coins instead of just a balance?
 using transaction_id_t = uint64_t; // std::hash | TODO use something bigger for lower chance of collision?
-using cbdc_request_t = std::tuple<transaction_id_t,std::unordered_map<wallet_id_t,coin_value_t>,std::unordered_map<wallet_id_t,coin_value_t>,std::vector<wallet_id_t>>; // txid, source, destination, sorted_wallets
+// using cbdc_request_t = std::tuple<transaction_id_t,std::unordered_map<wallet_id_t,coin_value_t>,std::unordered_map<wallet_id_t,coin_value_t>,std::vector<wallet_id_t>>; // txid, source, destination, sorted_wallets
+struct cbdc_request_t : public mutils::ByteRepresentable {
+    struct body : public mutils::ByteRepresentable {
+        transaction_id_t txid;
+
+        std::unordered_map<wallet_id_t, coin_value_t> senders;
+        std::unordered_map<wallet_id_t, coin_value_t> receivers;
+        std::vector<wallet_id_t> sorted_wallets;
+        body(transaction_id_t tx,
+        std::unordered_map<wallet_id_t, coin_value_t> s,
+        std::unordered_map<wallet_id_t, coin_value_t> r,
+        std::vector<wallet_id_t> wallets)
+        : txid(std::move(tx)),
+        senders(std::move(s)),
+        receivers(std::move(r)),
+        sorted_wallets(std::move(wallets)) {}
+        DEFAULT_SERIALIZATION_SUPPORT(body, txid, senders, receivers, sorted_wallets);
+    };
+
+    body Body;
+    std::vector<uint8_t> client_signature;
+
+    cbdc_request_t(body b,
+                   std::vector<uint8_t> client_signature) 
+        : Body(std::move(b)),
+        client_signature(client_signature) {}
+    DEFAULT_SERIALIZATION_SUPPORT(cbdc_request_t, Body, client_signature);
+
+    static std::vector<uint8_t> hash_body(cbdc_request_t::body Body) {
+        openssl::Hasher hasher(openssl::DigestAlgorithm::SHA256);
+        hasher.init();
+        // Note: get_hash_size() only works after init()
+        std::vector<uint8_t> hash(hasher.get_hash_size());
+        std::vector<uint8_t> body_bytes(mutils::bytes_size(Body));
+        mutils::to_bytes(Body, body_bytes.data());
+
+        hasher.add_bytes(body_bytes.data(), body_bytes.size());
+        hasher.finalize(hash.data());
+        return hash;
+    }
+};
 
 enum class transaction_status_t : uint8_t {
     PENDING,
@@ -50,29 +93,36 @@ using cascade_cbdc_config_t = struct cascade_cbdc_config_t {
 // cascade key paths
 #define CBDC_PREFIX "/cbdc"
 
+// object pool config
+// #define CBDC_OBJECT_POOL_PREFIX CBDC_PREFIX
+#define CBDC_OBJECT_POOL_PREFIX "/cbdc/state"
+#define CBDC_OBJECT_POOL_TYPE PersistentCascadeStoreWithStringKey
+#define CBDC_OBJECT_POOL_SUBGROUP 0
+#define CBDC_OBJECT_POOL_REGEX "/WID_[0-9]+" // group based on wallet ID
+
+// Log pool config
+#define CBDC_LOG_POOL_PREFIX CBDC_PREFIX "/sig"
+#define CBDC_LOG_POOL_TYPE SignatureCascadeStoreWithStringKey 
+#define CBDC_LOG_POOL_SUBGROUP 0
+#define CBDC_LOG_POOL_REGEX "/WID_[0-9]+" 
+
 // keys for client requests
-#define CBDC_REQUEST_PREFIX CBDC_PREFIX "/r"
-#define CBDC_REQUEST_MINT_PREFIX CBDC_REQUEST_PREFIX "/m/WID_" // + wallet_id
-#define CBDC_REQUEST_TRANSFER_PREFIX CBDC_REQUEST_PREFIX "/t/WID_" // + wallet_id
-#define CBDC_REQUEST_REDEEM_PREFIX CBDC_REQUEST_PREFIX "/r/WID_" // + wallet_id
+#define CBDC_REQUEST_PREFIX CBDC_OBJECT_POOL_PREFIX "/r" // /cbdc/state/r
+#define CBDC_REQUEST_MINT_PREFIX "/m/WID_" // + wallet_id
+#define CBDC_REQUEST_TRANSFER_PREFIX  "/t/WID_" // + wallet_id
+#define CBDC_REQUEST_REDEEM_PREFIX  "/r/r/WID_" // + wallet_id
 #define CBDC_REQUEST_LOG_KEY CBDC_REQUEST_PREFIX "/log"
 #define CBDC_REQUEST_INIT_KEY CBDC_REQUEST_PREFIX "/init"
 #define CBDC_REQUEST_RESET_KEY CBDC_REQUEST_PREFIX "/reset"
 
 // keys for storing wallets
-#define CBDC_WALLET_PREFIX CBDC_PREFIX "/w/WID_" // + wallet_id
+#define CBDC_WALLET_PREFIX CBDC_OBJECT_POOL_PREFIX "/w/WID_" // + wallet_id
 
 // keys for storing transactions
-#define CBDC_TRANSACTION_PREFIX CBDC_PREFIX "/tx/" // + transaction_id
-
-// object pool config
-#define CBDC_OBJECT_POOL_PREFIX CBDC_PREFIX
-#define CBDC_OBJECT_POOL_TYPE PersistentCascadeStoreWithStringKey
-#define CBDC_OBJECT_POOL_SUBGROUP 0
-#define CBDC_OBJECT_POOL_REGEX "/WID_[0-9]+" // group based on wallet ID
-
+#define CBDC_TRANSACTION_PREFIX CBDC_OBJECT_POOL_PREFIX "/tx/" // + transaction_id
 // service config
-#define CBDC_CONFIG_KEY CBDC_PREFIX "/config"
+#define CBDC_CONFIG_KEY CBDC_OBJECT_POOL_PREFIX "/config" // /cbdc/state/config
+// #define CBDC_CONFIG_KEY  "/cbdc/config"
 
 // logging
 
@@ -83,6 +133,7 @@ using cascade_cbdc_config_t = struct cascade_cbdc_config_t {
 #define CBDC_TAG_CLIENT_TRANSFER_SENT 100080
 #define CBDC_TAG_CLIENT_STATUS 100100
 #define CBDC_TAG_CLIENT_BATCHING 100110
+#define CBDC_TAG_CLIENT_MINT_SUCCESS 100150
 
 #define CBDC_TAG_UDL_HANDLER_START 200010
 #define CBDC_TAG_UDL_HANDLER_QUEUING 200020
