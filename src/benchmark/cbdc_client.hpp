@@ -28,27 +28,82 @@ using signature_callback_t = std::function<void(persistent::version_t, persisten
 class SignatureNotificationHandler {
 private:
     std::map<persistent::version_t, signature_callback_t> callbacks_by_version;
+    struct SigInfo {
+        persistent::version_t data_ver{};
+        persistent::version_t hash_ver{};
+        persistent::version_t prev_signed_ver{};
+        std::vector<uint8_t> sig;
+        std::vector<uint8_t> prev_sig;
+    };
+
+    std::mutex sig_mtx;
+    std::condition_variable sig_cv;
+    // buffer by data version -> SigInfo
+    std::unordered_map<persistent::version_t, SigInfo> sig_buffer;
 
 public:
     void operator()(const Blob& message_body) {
-        // Peek at the data version, which is either the first or second element in the message,
-        // depending on if evaluation is enabled (the message ID comes first if evaluation is enabled)
-        std::size_t data_version_offset = 0;
+        std::cout << "[DEBUG] operator is being invoked\n";
+        try {
+            std::size_t off = 0;
+            // If you control the format, add a tiny magic to the first 8 bytes when eval is enabled.
+            // Otherwise, only skip if message is large enough AND you know both sides compiled with eval.
 #ifdef ENABLE_EVALUATION
-        data_version_offset = sizeof(uint64_t);
+            if (message_body.size >= sizeof(uint64_t)) {
+                off = sizeof(uint64_t);
+            }
 #endif
-        persistent::version_t data_object_version;
-        std::memcpy(&data_object_version, message_body.bytes + data_version_offset, sizeof(data_object_version));
-        // If there is a callback registered for this version, call it, then delete it
-        auto find_callback = callbacks_by_version.find(data_object_version);
-        if(find_callback != callbacks_by_version.end()) {
-            // Skip past the evaluation message ID if evaluation is enabled
-            mutils::deserialize_and_run(nullptr, message_body.bytes + data_version_offset, find_callback->second);
-            callbacks_by_version.erase(find_callback);
+            auto deliver = [this](persistent::version_t data_ver,
+                                persistent::version_t hash_ver,
+                                const std::vector<uint8_t>& sig,
+                                persistent::version_t prev_signed_ver,
+                                const std::vector<uint8_t>& prev_sig) {
+                signature_callback_t cb_to_call{};
+                {
+                    std::lock_guard<std::mutex> lk(sig_mtx);
+                    sig_buffer[data_ver] = SigInfo{data_ver, hash_ver, prev_signed_ver, sig, prev_sig};
+                    auto it = callbacks_by_version.find(data_ver);
+                    if (it == callbacks_by_version.end()) it = callbacks_by_version.find(hash_ver);
+                    if (it != callbacks_by_version.end()) { cb_to_call = it->second; callbacks_by_version.erase(it); }
+                }
+                sig_cv.notify_all();
+                if (cb_to_call) cb_to_call(data_ver, hash_ver, sig, prev_signed_ver, prev_sig);
+            };
+
+            // add logging to confirm we actually enter here
+            // std::cerr << "[sig] blob size=" << message_body.size << " off=" << off << "\n";
+
+            try {
+                mutils::deserialize_and_run(nullptr, message_body.bytes + off, deliver);
+            } catch (const std::exception& e) {
+                std::cerr << "[sig] desrialization error: " << e.what() << "\n";
+            }
+
+
+        } catch (const std::exception& e) {
+            std::cerr << "[sig] deserialize error: " << e.what() << "\n";
         }
     }
-    void register_callback(persistent::version_t desired_data_version, const signature_callback_t& callback) {
-        callbacks_by_version.emplace(desired_data_version, callback);
+
+    void register_callback(persistent::version_t desired_data_version,
+                        const signature_callback_t& callback) {
+        // If the notification already arrived, deliver immediately
+        SigInfo info;
+        bool have_info = false;
+        {
+            std::lock_guard<std::mutex> lk(sig_mtx);
+            auto it = sig_buffer.find(desired_data_version);
+            if (it != sig_buffer.end()) {
+                info = it->second;
+                sig_buffer.erase(it);
+                have_info = true;
+            } else {
+                callbacks_by_version.emplace(desired_data_version, callback);
+            }
+        }
+        if (have_info) {
+            callback(info.data_ver, info.hash_ver, info.sig, info.prev_signed_ver, info.prev_sig);
+        }
     }
     SignatureNotificationHandler() = default;
     // Copying this object would mean the main thread loses the ability to register callbacks

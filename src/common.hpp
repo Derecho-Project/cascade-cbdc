@@ -98,13 +98,13 @@ using cascade_cbdc_config_t = struct cascade_cbdc_config_t {
 #define CBDC_OBJECT_POOL_PREFIX "/cbdc/state"
 #define CBDC_OBJECT_POOL_TYPE PersistentCascadeStoreWithStringKey
 #define CBDC_OBJECT_POOL_SUBGROUP 0
-#define CBDC_OBJECT_POOL_REGEX "/WID_[0-9]+" // group based on wallet ID
+#define CBDC_OBJECT_POOL_REGEX "/(m|t|r)/WID_[0-9]+" // group based on wallet ID
 
 // Log pool config
 #define CBDC_LOG_POOL_PREFIX CBDC_PREFIX "/sig"
 #define CBDC_LOG_POOL_TYPE SignatureCascadeStoreWithStringKey 
 #define CBDC_LOG_POOL_SUBGROUP 0
-#define CBDC_LOG_POOL_REGEX "/WID_[0-9]+" 
+#define CBDC_LOG_POOL_REGEX "/(m|t|r)/WID_[0-9]+" 
 
 // keys for client requests
 #define CBDC_REQUEST_PREFIX CBDC_OBJECT_POOL_PREFIX "/r" // /cbdc/state/r
