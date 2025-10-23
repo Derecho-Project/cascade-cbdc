@@ -108,8 +108,8 @@ using cascade_cbdc_config_t = struct cascade_cbdc_config_t {
 
 // keys for client requests
 #define CBDC_REQUEST_PREFIX CBDC_OBJECT_POOL_PREFIX "/r" // /cbdc/state/r
-#define CBDC_REQUEST_MINT_PREFIX "/m/WID_" // + wallet_id
-#define CBDC_REQUEST_TRANSFER_PREFIX  "/t/WID_" // + wallet_id
+#define CBDC_REQUEST_MINT_PREFIX "/r/m/WID_" // + wallet_id
+#define CBDC_REQUEST_TRANSFER_PREFIX  "/r/t/WID_" // + wallet_id
 #define CBDC_REQUEST_REDEEM_PREFIX  "/r/r/WID_" // + wallet_id
 #define CBDC_REQUEST_LOG_KEY CBDC_REQUEST_PREFIX "/log"
 #define CBDC_REQUEST_INIT_KEY CBDC_REQUEST_PREFIX "/init"

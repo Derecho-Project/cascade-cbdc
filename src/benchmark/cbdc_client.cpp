@@ -16,6 +16,7 @@ CascadeCBDC::~CascadeCBDC(){
 void CascadeCBDC::setup(uint64_t batch_min_size,uint64_t batch_max_size,uint64_t batch_time_us){
     // create object pools
     // check if already exists
+    load_service_key("service_public_key.pem");
     auto opm = capi.find_object_pool(CBDC_OBJECT_POOL_PREFIX);
     if (!opm.is_valid() || opm.is_null()){
         auto res = capi.template create_object_pool<CBDC_OBJECT_POOL_TYPE>(CBDC_OBJECT_POOL_PREFIX,CBDC_OBJECT_POOL_SUBGROUP,HASH,{},CBDC_OBJECT_POOL_REGEX);
@@ -35,7 +36,7 @@ void CascadeCBDC::setup(uint64_t batch_min_size,uint64_t batch_max_size,uint64_t
     //                                                        CBDC_LOG_POOL_PREFIX);
     std::string sig_pool = std::string(CBDC_LOG_POOL_PREFIX);
     std::cout << sig_pool << "\n";
-    if (sig_pool.empty() || sig_pool.back() != '/') sig_pool.push_back('/');
+    // if (sig_pool.empty() || sig_pool.back() != '/') sig_pool.push_back('/');
 
     std::cout << "[setup] Binding handler on pool: " << sig_pool << "\n";
 
@@ -442,7 +443,6 @@ void CascadeCBDC::ClientThread::main_loop(){
 }
 
 bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& request) {
-    // 1) Build the bare key (NO pool prefix)
     wallet_id_t first_wallet = request.Body.sorted_wallets[0];
     std::string bare_key;
     switch(op) {
@@ -451,28 +451,25 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
         case thread_request_t::REDEEM:   bare_key = CBDC_BUILD_REDEEM_KEY(first_wallet);   break;
     }
 
-    // 2) Compute the shard using the full *object-pool* key (prefix + bare)
     const std::string data_key = std::string(CBDC_OBJECT_POOL_PREFIX) + bare_key;
     const std::string sig_key  = std::string(CBDC_LOG_POOL_PREFIX)    + bare_key;
 
     auto [sti, sgi, shard_index] = capi.key_to_shard(data_key);
 
-    // 3) Serialize request
     std::vector<uint8_t> buf(mutils::bytes_size(request));
     mutils::to_bytes(request, buf.data());
 
     ObjectWithStringKey obj;
-    obj.key  = bare_key;                    // *** bare key for typed API ***
+    obj.key  = data_key;
     obj.blob = Blob(buf.data(), buf.size());
 
-    // 4) Subscribe once to the sig key (full sig prefix + bare)
     if (subscribed_notification_keys.insert(sig_key).second) {
         auto sub = capi.subscribe_signature_notifications(sig_key);
         sub.get();
         std::cout << "[subscribe-ok] " << sig_key << "\n";
     }
+    std::this_thread::sleep_for(std::chrono::seconds(5));
 
-    // 5) Register the version callback BEFORE blocking on anything
     std::mutex cb_mx;
     std::condition_variable cb_cv;
     bool fired = false;
@@ -480,7 +477,6 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
     std::vector<uint8_t> server_signature, prev_signature;
 
 
-    // 6) **Typed put** into the object pool, explicit subgroup/shard
     // auto put_res   = capi.put(obj);
     auto put_res   = capi.put<CBDC_OBJECT_POOL_TYPE>(obj, CBDC_OBJECT_POOL_SUBGROUP, shard_index, true); // <<< TYPED
     auto put_reply = put_res.get().begin()->second.get();
@@ -490,7 +486,6 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
     obj.previous_version        = std::get<2>(put_reply);
     obj.previous_version_by_key = std::get<3>(put_reply);
 
-    // 7) Now that we know the data version, wire the callback (your handler buffers early arrivals)
     signature_notification_handler.register_callback(obj.version, 
                 [&](persistent::version_t data_ver, persistent::version_t hash_ver,
                       const std::vector<uint8_t>& sig, persistent::version_t /*prev_signed_ver*/,
@@ -503,11 +498,10 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
         cb_cv.notify_all();
     });
 
-    // We'll (re)register below once we know the exact data version.
-    // 8) Wait (with timeout) for signature notification
     {
         std::unique_lock<std::mutex> lk(cb_mx);
         if (!cb_cv.wait_for(lk, std::chrono::seconds(5), [&]{ return fired; })) {
+
             std::cerr << "[timeout] No signature notification for data ver "
                       << std::hex << obj.version << std::dec
                       << " key=" << sig_key << "\n";
@@ -515,11 +509,9 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
         }
     }
 
-    // 9) Fetch the hash object **by the exact version you received**, NOT CURRENT_VERSION
     auto hash_get_result = capi.get(sig_key, hash_object_version /* exact version */, /*stable=*/false);
     auto hashObject = hash_get_result.get().begin()->second.get();
 
-    // 10) Verify local hash matches server hash, then verify signature
     auto local_hash = compute_hash(obj);
     if (hashObject.blob.size != local_hash.size() ||
         memcmp(hashObject.blob.bytes, local_hash.data(), local_hash.size()) != 0) {
@@ -559,6 +551,7 @@ bool CascadeCBDC::verify_object_signature(const ObjectWithStringKey& hash,
     service_verifier->init();
 
     SignatureCascadeStoreWithStringKey::LogEntry hash_log_entry;
+    hash_log_entry.objects.emplace(hash.get_key_ref(), hash);
     const std::size_t log_entry_size = mutils::bytes_size(hash_log_entry);
 
     std::vector<uint8_t> bytes_of_log_entry(log_entry_size);
@@ -570,7 +563,7 @@ bool CascadeCBDC::verify_object_signature(const ObjectWithStringKey& hash,
 }
 
 bool CascadeCBDC::load_service_key(const std::string& pem_path) {
-    service_verifier = std::make_unique<openssl::Verifier>(openssl::EnvelopeKey::from_pem_public("service_public_key.pem"),
+    service_verifier = std::make_unique<openssl::Verifier>(openssl::EnvelopeKey::from_pem_public(pem_path),
                                                            openssl::DigestAlgorithm::SHA256);
     return true;
 }
