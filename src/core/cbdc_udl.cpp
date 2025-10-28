@@ -653,7 +653,7 @@ std::tuple<bool,bool,uint32_t> CascadeCBDC::CBDCThread::is_mine(internal_transac
     // check where the next wallet goes, but only of the associated optimization is enabled
     bool same_shard = false;
     uint32_t subgroup_type_index,subgroup_index,next_shard;
-    std::string wallet_key = CBDC_BUILD_TRANSFER_KEY(next_wallet_id);
+    std::string wallet_key = CBDC_OBJECT_POOL_PREFIX + CBDC_BUILD_TRANSFER_KEY(next_wallet_id);
     std::tie(subgroup_type_index,subgroup_index,next_shard) = capi.key_to_shard(wallet_key);
     if(udl->config.enable_cross_thread_communication){
         same_shard = next_shard == shard_index;

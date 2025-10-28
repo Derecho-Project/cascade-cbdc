@@ -172,18 +172,22 @@ int main(int argc, char** argv){
        
         auto extra_time = std::chrono::nanoseconds(0);
         for(uint64_t i=0;i<transfers.size();i++){
-            auto start = std::chrono::steady_clock::now();
-            auto& transfer = transfers[i];
-            auto txid = cbdc.transfer(transfer.senders,transfer.receivers);
-            transfer_id[i] = txid;
-            auto end = std::chrono::steady_clock::now();
-            
-            if(rate_control){
-                auto elapsed = end - start + extra_time;
-                auto sleep_time = iteration_time - elapsed;
-                start = std::chrono::steady_clock::now();
-                std::this_thread::sleep_for(sleep_time);
-                extra_time = std::chrono::steady_clock::now() - start - sleep_time;
+            try {
+                auto start = std::chrono::steady_clock::now();
+                auto& transfer = transfers[i];
+                auto txid = cbdc.transfer(transfer.senders,transfer.receivers);
+                transfer_id[i] = txid;
+                auto end = std::chrono::steady_clock::now();
+                
+                if(rate_control){
+                    auto elapsed = end - start + extra_time;
+                    auto sleep_time = iteration_time - elapsed;
+                    start = std::chrono::steady_clock::now();
+                    std::this_thread::sleep_for(sleep_time);
+                    extra_time = std::chrono::steady_clock::now() - start - sleep_time;
+                }
+            } catch (const std::runtime_error& e) {
+                std::cerr << "Fails here: " << e.what();
             }
         }
         std::this_thread::sleep_for(std::chrono::seconds(2));

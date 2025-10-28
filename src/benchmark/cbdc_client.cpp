@@ -151,13 +151,16 @@ transaction_id_t CascadeCBDC::mint(wallet_id_t wallet_id,coin_value_t value){
 }
 
 transaction_id_t CascadeCBDC::transfer(const std::unordered_map<wallet_id_t,coin_value_t>& senders,const std::unordered_map<wallet_id_t,coin_value_t>& receivers){
+    std::cout << "Fail check 1\n";
     transaction_id_t txid = next_transaction_id();
     TimestampLogger::log(CBDC_TAG_CLIENT_TRANSFER_START,my_id,txid,0);
    
+    std::cout << "Fails check 2\n";
     std::vector<wallet_id_t> sorted_wallets; 
     coin_value_t value_in = 0;
     coin_value_t value_out = 0;
     
+    std::cout << "Fails check 3\n";
     for(auto& item : senders){
         sorted_wallets.push_back(item.first);
         value_in += item.second;
@@ -170,15 +173,16 @@ transaction_id_t CascadeCBDC::transfer(const std::unordered_map<wallet_id_t,coin
             value_out += item.second;
         }
     }
+    std::cout << "Fails check 4\n";
 
     std::sort(sorted_wallets.begin(),sorted_wallets.end(),[&](const wallet_id_t &a, const wallet_id_t &b){
                 uint32_t subgroup_type_index,subgroup_index,shard_index;
 
-                std::string a_key = CBDC_BUILD_TRANSFER_KEY(a);
+                std::string a_key = std::string(CBDC_OBJECT_POOL_PREFIX) +  CBDC_BUILD_TRANSFER_KEY(a);
                 std::tie(subgroup_type_index,subgroup_index,shard_index) = capi.key_to_shard(a_key);
                 uint64_t a_index = shard_index * config.num_threads + (a % config.num_threads);
                 
-                std::string b_key = CBDC_BUILD_TRANSFER_KEY(b);
+                std::string b_key = std::string(CBDC_OBJECT_POOL_PREFIX) + CBDC_BUILD_TRANSFER_KEY(b);
                 std::tie(subgroup_type_index,subgroup_index,shard_index) = capi.key_to_shard(b_key);
                 uint64_t b_index = shard_index * config.num_threads + (b % config.num_threads);
 
@@ -192,6 +196,7 @@ transaction_id_t CascadeCBDC::transfer(const std::unordered_map<wallet_id_t,coin
             value_out += item.second;
         }
     }
+    std::cout << "check \n";
 
     // validate if value_in == value_out
     if(value_in != value_out){
@@ -205,7 +210,7 @@ transaction_id_t CascadeCBDC::transfer(const std::unordered_map<wallet_id_t,coin
     }
     
     wallet_id_t first_wallet = sorted_wallets[0];
-    auto first_shard = std::get<2>(capi.key_to_shard(CBDC_BUILD_TRANSFER_KEY(first_wallet)));
+    auto first_shard = std::get<2>(capi.key_to_shard(CBDC_OBJECT_POOL_PREFIX + CBDC_BUILD_TRANSFER_KEY(first_wallet)));
     cbdc_request_t::body request_body(txid,senders,receivers,sorted_wallets);
     cbdc_request_t request(std::move(request_body), cbdc_request_t::hash_body(request_body));
     bool success = put_with_signature(thread_request_t::TRANSFER, request);
@@ -464,8 +469,11 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
     obj.blob = Blob(buf.data(), buf.size());
 
     if (subscribed_notification_keys.insert(sig_key).second) {
+        if (op == thread_request_t::TRANSFER) {
+            std::cout << sig_key<<"\n";
+        }
         auto sub = capi.subscribe_signature_notifications(sig_key);
-        sub.get();
+        // sub.get();
         std::cout << "[subscribe-ok] " << sig_key << "\n";
     }
     std::this_thread::sleep_for(std::chrono::seconds(5));
