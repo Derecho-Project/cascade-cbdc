@@ -294,18 +294,23 @@ void CascadeCBDC::reset(){
 }
 
 void CascadeCBDC::write_logs(const std::string local_log,const std::string remote_logs){
+    // std::cout << "check 1\n";
     TimestampLogger::flush(local_log);
 
     if(remote_logs == "-"){
         return;
     }
+    // std::cout << "check 2\n";
 
     ObjectWithStringKey obj;
     obj.key = CBDC_REQUEST_LOG_KEY;
     obj.blob = Blob(reinterpret_cast<const uint8_t*>(remote_logs.c_str()),remote_logs.length()+1);
+    // std::cout << "check 3\n";
             
-    std::vector<std::vector<uint32_t>> shards = capi.get_subgroup_members(CBDC_PREFIX);
+    // std::vector<std::vector<uint32_t>> shards = capi.get_subgroup_members(CBDC_PREFIX);
+    std::vector<std::vector<uint32_t>> shards = capi.get_subgroup_members(CBDC_OBJECT_POOL_PREFIX);
     for(uint32_t shard_index = 0; shard_index < shards.size(); shard_index++){
+        std::cout << shard_index << std::endl;
         capi.put_and_forget<CBDC_OBJECT_POOL_TYPE>(obj,CBDC_OBJECT_POOL_SUBGROUP,shard_index,true);
     }
 }
@@ -486,7 +491,7 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
 
 
     // auto put_res   = capi.put(obj);
-    auto put_res   = capi.put<CBDC_OBJECT_POOL_TYPE>(obj, CBDC_OBJECT_POOL_SUBGROUP, shard_index, true); // <<< TYPED
+    auto put_res   = capi.put<CBDC_OBJECT_POOL_TYPE>(obj, CBDC_OBJECT_POOL_SUBGROUP, shard_index, true);
     auto put_reply = put_res.get().begin()->second.get();
 
     obj.version                 = std::get<0>(put_reply);
