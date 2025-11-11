@@ -848,6 +848,7 @@ void CascadeCBDC::CBDCThread::persist_wallet(wallet_id_t wallet_id,internal_tran
     if(!is_my_persistence(0)){ // batching is improved if it is always the same node
         return;
     }
+    std::cout << "------------------------------ persist wallet at " << wallet_id << " -------------------\n";
 
     // if using the wallet persistence thread
     if(udl->config.enable_wallet_persistence_thread){
@@ -879,6 +880,7 @@ void CascadeCBDC::CBDCThread::persist_wallet(wallet_id_t wallet_id,internal_tran
 void CascadeCBDC::CBDCThread::persist_transaction(internal_transaction_t* tx){
     auto request = tx->request;
     auto& txid = request->Body.txid;
+    std::cout << "------------------------------ persist transaction -------------------\n";
     
     // check if this node is responsible for this persistence
     //if(!is_my_persistence(txid)){

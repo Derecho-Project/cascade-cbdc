@@ -215,7 +215,7 @@ int main(int argc, char** argv){
             auto balance = CBDC_COMPUTE_WALLET_BALANCE(wallet);
             if(balance != item.second){
                 error_count++;
-                //std::cout << "  - balance error for wallet " << item.first << ": expected " << item.second << " but got " << balance << std::endl;
+                std::cout << "  - balance error for wallet " << item.first << ": expected " << item.second << " but got " << balance << std::endl;
             }
         }
 

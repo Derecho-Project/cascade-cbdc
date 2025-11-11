@@ -151,16 +151,13 @@ transaction_id_t CascadeCBDC::mint(wallet_id_t wallet_id,coin_value_t value){
 }
 
 transaction_id_t CascadeCBDC::transfer(const std::unordered_map<wallet_id_t,coin_value_t>& senders,const std::unordered_map<wallet_id_t,coin_value_t>& receivers){
-    std::cout << "Fail check 1\n";
     transaction_id_t txid = next_transaction_id();
     TimestampLogger::log(CBDC_TAG_CLIENT_TRANSFER_START,my_id,txid,0);
    
-    std::cout << "Fails check 2\n";
     std::vector<wallet_id_t> sorted_wallets; 
     coin_value_t value_in = 0;
     coin_value_t value_out = 0;
     
-    std::cout << "Fails check 3\n";
     for(auto& item : senders){
         sorted_wallets.push_back(item.first);
         value_in += item.second;
@@ -173,7 +170,6 @@ transaction_id_t CascadeCBDC::transfer(const std::unordered_map<wallet_id_t,coin
             value_out += item.second;
         }
     }
-    std::cout << "Fails check 4\n";
 
     std::sort(sorted_wallets.begin(),sorted_wallets.end(),[&](const wallet_id_t &a, const wallet_id_t &b){
                 uint32_t subgroup_type_index,subgroup_index,shard_index;
@@ -196,8 +192,8 @@ transaction_id_t CascadeCBDC::transfer(const std::unordered_map<wallet_id_t,coin
             value_out += item.second;
         }
     }
-    std::cout << "check \n";
 
+    std::cout << value_in << " " << value_out << "\n";
     // validate if value_in == value_out
     if(value_in != value_out){
         std::cout << "ERROR: value_in(" << value_in << ") != value_out(" << value_out << ") in TX " << txid << std::endl;
@@ -262,6 +258,8 @@ wallet_t CascadeCBDC::get_wallet(wallet_id_t wallet_id){
 
         if(obj.version != persistent::INVALID_VERSION){
             return *mutils::from_bytes<wallet_t>(nullptr,obj.blob.bytes);
+        } else {
+            std::cerr << obj.version << "\n";
         }
     }
   
@@ -310,7 +308,6 @@ void CascadeCBDC::write_logs(const std::string local_log,const std::string remot
     // std::vector<std::vector<uint32_t>> shards = capi.get_subgroup_members(CBDC_PREFIX);
     std::vector<std::vector<uint32_t>> shards = capi.get_subgroup_members(CBDC_OBJECT_POOL_PREFIX);
     for(uint32_t shard_index = 0; shard_index < shards.size(); shard_index++){
-        std::cout << shard_index << std::endl;
         capi.put_and_forget<CBDC_OBJECT_POOL_TYPE>(obj,CBDC_OBJECT_POOL_SUBGROUP,shard_index,true);
     }
 }
