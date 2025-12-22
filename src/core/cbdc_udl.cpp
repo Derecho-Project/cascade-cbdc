@@ -202,7 +202,6 @@ void CascadeCBDC::ocdpo_handler( // of critical data path function
         return;
     }
     
-    std::cout <<"[DEBUG] Key String: "<< key_string <<std::endl;
     if(key_string == "init"){ // write UDL config so clients can get it
         auto shard_index = typed_ctxt->get_service_client_ref().get_my_shard<CBDC_OBJECT_POOL_TYPE>(CBDC_OBJECT_POOL_SUBGROUP);
         auto shard = typed_ctxt->get_service_client_ref().get_shard_members<CBDC_OBJECT_POOL_TYPE>(CBDC_OBJECT_POOL_SUBGROUP,shard_index);
@@ -216,7 +215,6 @@ void CascadeCBDC::ocdpo_handler( // of critical data path function
                     return mutils::to_bytes(config, buffer);
                 },mutils::bytes_size(config));
 
-            std::cout << "[DEBUG] Doing a put with: " << obj.key << std::endl;
             typed_ctxt->get_service_client_ref().put_and_forget(obj);
         }
         return;
@@ -848,7 +846,6 @@ void CascadeCBDC::CBDCThread::persist_wallet(wallet_id_t wallet_id,internal_tran
     if(!is_my_persistence(0)){ // batching is improved if it is always the same node
         return;
     }
-    std::cout << "------------------------------ persist wallet at " << wallet_id << " -------------------\n";
 
     // if using the wallet persistence thread
     if(udl->config.enable_wallet_persistence_thread){
@@ -872,15 +869,21 @@ void CascadeCBDC::CBDCThread::persist_wallet(wallet_id_t wallet_id,internal_tran
 
     // put the object
     TimestampLogger::log(CBDC_TAG_UDL_WALLET_PERSIST_START,node_id,txid,wallet_id);
-    capi.put_and_forget(obj);
+    // capi.put_and_forget(obj);
+    auto put_res = capi.put(obj);
     TimestampLogger::log(CBDC_TAG_UDL_WALLET_PERSIST_END,node_id,txid,wallet_id);
+    auto put_reply = put_res.get().begin()->second.get();
+
+    auto version                 = std::get<0>(put_reply);
+    auto timestamp_us            = std::get<1>(put_reply);
+    auto previous_version        = std::get<2>(put_reply);
+    auto previous_version_by_key = std::get<3>(put_reply);
 }
 
 // transaction persistence: happens after the first wallet commits or aborts
 void CascadeCBDC::CBDCThread::persist_transaction(internal_transaction_t* tx){
     auto request = tx->request;
     auto& txid = request->Body.txid;
-    std::cout << "------------------------------ persist transaction -------------------\n";
     
     // check if this node is responsible for this persistence
     //if(!is_my_persistence(txid)){
@@ -951,6 +954,7 @@ void CascadeCBDC::WalletPersistenceThread::main_loop(){
     size_t curr_batch_size = 0;
 
     while(running){
+        curr_batch_size = 0;
         std::unique_lock<std::mutex> lock(thread_mtx);
         if(wallet_queue.empty()){
             thread_signal.wait_for(lock,batch_time);
@@ -963,23 +967,28 @@ void CascadeCBDC::WalletPersistenceThread::main_loop(){
         auto now = std::chrono::steady_clock::now();
 
         if(!wallet_queue.empty() &&
-            (curr_batch_size < udl->config.wallet_persistence_batch_min_size) || 
-            ((now-wait_start) >= batch_time)) {
-            std::size_t wallet_size = mutils::bytes_size(std::get<1>(wallet_queue.front()));
-            if (curr_batch_size + wallet_size < udl->config.wallet_persistence_batch_min_size){
+            (
+                (wallet_queue.size() >= udl->config.wallet_persistence_batch_min_size) || 
+                ((now-wait_start) >= batch_time))
+            ) {
+            const size_t n = std::min<size_t>(
+                wallet_queue.size(),
+                udl->config.wallet_persistence_batch_max_size
+            );
+            to_persist.clear();
+            to_persist.reserve(n);
+
+            for (size_t i = 0; i < n; ++i) {
                 to_persist.push_back(wallet_queue.front());
-                curr_batch_size += wallet_size;
-                persist_count = to_persist.size();
                 wallet_queue.pop();
             }
-            // copy out wallets
-            for(uint64_t i=0;i<persist_count;i++){
-                to_persist[i] = wallet_queue.front();
-                wallet_queue.pop();
-            }
+
+            wait_start = now; // reset timer after forming a batch
+            lock.unlock();
+        } else {
+            lock.unlock();
         }
-        
-        lock.unlock();
+        persist_count = to_persist.size();
 
         // now we are outside the locked region (i.e the cbdc protocol can continue): build objects and call put_objects
         if(persist_count > 0){
@@ -1001,11 +1010,10 @@ void CascadeCBDC::WalletPersistenceThread::main_loop(){
             }
             
             TimestampLogger::log(CBDC_TAG_UDL_WALLET_BATCHING,node_id,objects.size(),0);
-            capi.put_objects_and_forget(objects);
+            capi.put_objects(objects);
         }
         
         // Reset for next batch
-        curr_batch_size = 0;
         to_persist.clear();
     }
 }

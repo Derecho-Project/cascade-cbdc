@@ -28,6 +28,7 @@ BACKUP_LAYOUT=backup_layout.json
 LAYOUT_CFG=layout.json
 DLL_CFG=udl_dlls.cfg
 DFG_CFG=dfgs.json
+BACKUP_DFG_CFG=backup_dfgs.json
 DERECHO_CFG=derecho.cfg
 GEN_KEYS=gen_keys.sh
 
@@ -46,7 +47,6 @@ for i in $(seq 0 $((NUM_SERVERS - 1))); do
     mkdir -p n$i
     ln -sf ../$LAYOUT_CFG n$i/$LAYOUT_CFG
     ln -sf ../$DLL_TMP n$i/$DLL_CFG
-    ln -sf ../$DFG_TMP n$i/$DFG_CFG
 
     if ((i < 4)); then
         sed "s@^local_id = .*@local_id = $i@g" $DERECHO_NODE_TMP |
@@ -68,6 +68,7 @@ for i in $(seq 0 $((NUM_SERVERS - 1))); do
             sed "s@^rdmc_port = .*@rdmc_port = $rdmc_port@g" |
             sed "s@^external_port = .*@external_port = $external_port@g" >n$i/$DERECHO_CFG
         ln -sf ../$LAYOUT_CFG n$i/$LAYOUT_CFG
+        ln -sf ../$DFG_TMP n$i/$DFG_CFG
     else
         sed "s@^local_id = .*@local_id = $i@g" $DERECHO_NODE_TMP |
             sed "s@^gms_port = .*@gms_port = $gms_port@g" |
@@ -86,6 +87,7 @@ for i in $(seq 0 $((NUM_SERVERS - 1))); do
             sed "s@^rdmc_port = .*@rdmc_port = $rdmc_port@g" |
             sed "s@^external_port = .*@external_port = $external_port@g" >n$i/$DERECHO_CFG
         ln -sf ../$BACKUP_LAYOUT n$i/$LAYOUT_CFG
+        ln -sf ../$BACKUP_DFG_CFG n$i/$DFG_CFG
     fi
 
     # cascade k/v store
@@ -100,6 +102,7 @@ done
 ln -sf ../$GEN_KEYS $GEN_KEYS
 ln -sf ../$DLL_TMP client/$DLL_CFG
 ln -sf ../$DFG_TMP client/$DFG_CFG
+
 mkdir -p client
 ln -sf ../../run_benchmark client/run_benchmark
 ln -sf ../../generate_workload client/generate_workload

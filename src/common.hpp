@@ -15,7 +15,7 @@ using wallet_id_t = uint64_t;
 using coin_value_t = uint64_t;
 using wallet_t = coin_value_t; // TODO use separate coins instead of just a balance?
 using transaction_id_t = uint64_t; // std::hash | TODO use something bigger for lower chance of collision?
-// using cbdc_request_t = std::tuple<transaction_id_t,std::unordered_map<wallet_id_t,coin_value_t>,std::unordered_map<wallet_id_t,coin_value_t>,std::vector<wallet_id_t>>; // txid, source, destination, sorted_wallets
+
 struct cbdc_request_t : public mutils::ByteRepresentable {
     struct body : public mutils::ByteRepresentable {
         transaction_id_t txid;
@@ -98,13 +98,13 @@ using cascade_cbdc_config_t = struct cascade_cbdc_config_t {
 #define CBDC_OBJECT_POOL_PREFIX "/cbdc/state"
 #define CBDC_OBJECT_POOL_TYPE PersistentCascadeStoreWithStringKey
 #define CBDC_OBJECT_POOL_SUBGROUP 0
-#define CBDC_OBJECT_POOL_REGEX "/(m|t|r)/WID_[0-9]+" // group based on wallet ID
+#define CBDC_OBJECT_POOL_REGEX "/(m|t|r|w)/WID_[0-9]+" // group based on wallet ID
 
 // Log pool config
 #define CBDC_LOG_POOL_PREFIX CBDC_PREFIX "/sig"
 #define CBDC_LOG_POOL_TYPE SignatureCascadeStoreWithStringKey 
 #define CBDC_LOG_POOL_SUBGROUP 0
-#define CBDC_LOG_POOL_REGEX "/(m|t|r)/WID_[0-9]+" 
+#define CBDC_LOG_POOL_REGEX "/(m|t|r|w)/WID_[0-9]+" 
 
 // keys for client requests
 #define CBDC_REQUEST_PREFIX CBDC_OBJECT_POOL_PREFIX "/r" // /cbdc/state/r

@@ -43,7 +43,6 @@ private:
 
 public:
     void operator()(const Blob& message_body) {
-        std::cout << "[DEBUG] operator is being invoked\n";
         try {
             std::size_t off = 0;
             // If you control the format, add a tiny magic to the first 8 bytes when eval is enabled.
@@ -157,6 +156,11 @@ class CascadeCBDC {
     std::mutex txid_mtx;
     bool signature_pool_handler_registered = false;
     transaction_id_t next_transaction_id();
+    void dump_request(const std::string& label, const ObjectWithStringKey& obj);
+    void dump_blob(const std::string& label, const ObjectWithStringKey& obj);
+    void diff_bytes(const uint8_t* a, size_t asz,
+                    const uint8_t* b, size_t bsz,
+                    const std::string& label);
     
     public:
 

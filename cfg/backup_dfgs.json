@@ -1,0 +1,33 @@
+[
+    {
+        "id": "2b085654-b9cc-40f9-bd14-c541f7bb5cee",
+        "desc": "CBDC",
+        "graph": [
+            {
+                "pathname": "/cbdc/state/r",
+                "shard_dispatcher_list": [
+                    "one"
+                ],
+                "user_defined_logic_hook_list": [
+                    "ordered"
+                ],
+                "user_defined_logic_list": [
+                    "38a8ae35-37a8-4d6e-929e-64e7cba86de3"
+                ],
+                "user_defined_logic_stateful_list": [
+                    "singlethreaded"
+                ],
+                "user_defined_logic_config_list": [
+                    {
+                        "debug_output": true
+                    }
+                ],
+                "destinations": [
+                    {
+                        "/cbdc/sig/r": "put"
+                    }
+                ]
+            }
+        ]
+    }
+]
