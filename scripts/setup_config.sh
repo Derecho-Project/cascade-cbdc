@@ -50,7 +50,6 @@ for i in $(seq 0 $((NUM_SERVERS - 1))); do
 
     if ((i < 4)); then
         sed "s@^local_id = .*@local_id = $i@g" $DERECHO_NODE_TMP >n$i/$DERECHO_NODE_CFG
-        cp $DERECHO_NODE_TMP n$i/$DERECHO_NODE_CFG
         cp $WANAGENT_CFG n$i/$WANAGENT_CFG
         sed "s@^local_id = .*@local_id = $i@g" $CONFIG_TMP >n$i/$DERECHO_CFG
         ln -sf ../$LAYOUT_CFG n$i/$LAYOUT_CFG
