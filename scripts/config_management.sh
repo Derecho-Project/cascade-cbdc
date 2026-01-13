@@ -19,7 +19,7 @@ set -euo pipefail
 main_cfg="${1:-}"
 node_cfg="derecho_node.cfg.tmp"
 wan_cfg="wanagent.json"
-CONTACT_PORT=23581
+CONTACT_PORT=23580
 
 [[ -n "${main_cfg}" ]] || {
     echo "usage: $0 <derecho.cfg.tmp>" >&2
