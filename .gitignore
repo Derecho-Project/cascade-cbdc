@@ -31,9 +31,13 @@
 *.out
 *.app
 
+# configs
+configs.json
+
 CMakeFiles/
 CMakeCache.txt
 build/
 bin/
 obj/
+scp/
 
