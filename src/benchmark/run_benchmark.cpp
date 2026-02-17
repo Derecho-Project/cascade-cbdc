@@ -1,4 +1,3 @@
-
 #include <iostream>
 #include <string>
 #include <thread>
@@ -7,14 +6,24 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <unordered_set>
+#include <unordered_map>
 #include "cbdc_client.hpp"
 #include "benchmark_workload.hpp"
 
+// NOTE: 1000ms is too coarse for latency measurement; keep this for legacy defaults,
+// but we'll use a smaller interval for per-tx completion polling below.
 #define LAST_TX_POLL_INTERVAL_MS 1000
+
 #define DEFAULT_SECONDS_AFTER_STEP 5
 #define DEFAULT_BATCH_MIN_SIZE 0
 #define DEFAULT_BATCH_MAX_SIZE 150
 #define DEFAULT_BATCH_TIME_US 500
+
+// You need to define/enable this tag in your TimestampLogger project.
+// It is used to mark the first observation of COMMIT/ABORT per txid.
+#ifndef CBDC_TAG_CLIENT_STATUS_TERMINAL
+#define CBDC_TAG_CLIENT_STATUS_TERMINAL 100167
+#endif
 
 void print_help(const std::string& bin_name){
     std::cout << "usage: " << bin_name << " [options] <benchmark_workload_file>" << std::endl;
@@ -100,7 +109,7 @@ int main(int argc, char** argv){
     if(fname.empty()){
         fname = workload_file + ".log";
     }
-    
+
     if(remote_logs.empty()){
         remote_logs = "cbdc.log";
     }
@@ -119,7 +128,7 @@ int main(int argc, char** argv){
     std::cout << "  output_file = " << fname << std::endl;
     std::cout << "  remote_log = " << remote_logs << std::endl;
 
-    cbdc.setup(batch_min_size,batch_max_size,batch_time_us); 
+    cbdc.setup(batch_min_size,batch_max_size,batch_time_us);
 
     std::chrono::nanoseconds iteration_time;
     if(send_rate != 0){
@@ -148,10 +157,14 @@ int main(int argc, char** argv){
 
             if(rate_control){
                 auto elapsed = end - start + extra_time;
-                auto sleep_time = iteration_time - elapsed;
-                start = std::chrono::steady_clock::now();
-                std::this_thread::sleep_for(sleep_time);
-                extra_time = std::chrono::steady_clock::now() - start - sleep_time;
+                if(elapsed < iteration_time){
+                    auto sleep_time = iteration_time - elapsed;
+                    start = std::chrono::steady_clock::now();
+                    std::this_thread::sleep_for(sleep_time);
+                    extra_time = std::chrono::steady_clock::now() - start - sleep_time;
+                } else {
+                    extra_time = std::chrono::nanoseconds(0);
+                }
             }
         }
         std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -169,7 +182,7 @@ int main(int argc, char** argv){
     if(transfer_step){
         auto& transfers = benchmark.get_transfers();
         std::cout << "performing " << transfers.size() << " transfers ..." << std::endl;
-       
+
         auto extra_time = std::chrono::nanoseconds(0);
         for(uint64_t i=0;i<transfers.size();i++){
             try {
@@ -178,13 +191,17 @@ int main(int argc, char** argv){
                 auto txid = cbdc.transfer(transfer.senders,transfer.receivers);
                 transfer_id[i] = txid;
                 auto end = std::chrono::steady_clock::now();
-                
+
                 if(rate_control){
                     auto elapsed = end - start + extra_time;
-                    auto sleep_time = iteration_time - elapsed;
-                    start = std::chrono::steady_clock::now();
-                    std::this_thread::sleep_for(sleep_time);
-                    extra_time = std::chrono::steady_clock::now() - start - sleep_time;
+                    if(elapsed < iteration_time){
+                        auto sleep_time = iteration_time - elapsed;
+                        start = std::chrono::steady_clock::now();
+                        std::this_thread::sleep_for(sleep_time);
+                        extra_time = std::chrono::steady_clock::now() - start - sleep_time;
+                    } else {
+                        extra_time = std::chrono::nanoseconds(0);
+                    }
                 }
             } catch (const std::runtime_error& e) {
                 std::cerr << "Fails here: " << e.what();
@@ -192,13 +209,35 @@ int main(int argc, char** argv){
         }
         std::this_thread::sleep_for(std::chrono::seconds(2));
 
-        // poll until last TX is finished
-        std::cout << "waiting last TX to finish ..." << std::endl;
-        auto last_tx = transfer_id[transfers.size()-1];
-        auto poll_interval = std::chrono::milliseconds(LAST_TX_POLL_INTERVAL_MS);
-        while(cbdc.get_status(last_tx) == transaction_status_t::UNKNOWN){
+        // poll until ALL TXs are finished (and log first terminal observation per txid)
+        std::cout << "waiting for all TXs to finish ..." << std::endl;
+
+        // Use a small interval for latency measurement
+        auto poll_interval = std::chrono::milliseconds(5);
+
+        std::unordered_set<uint64_t> pending;
+        pending.reserve(transfers.size());
+        for(uint64_t i=0;i<transfers.size();i++){
+            pending.insert(i);
+        }
+
+        while(!pending.empty()){
+            for(auto it = pending.begin(); it != pending.end(); ){
+                uint64_t i = *it;
+                auto txid = transfer_id[i];
+
+                auto st = cbdc.get_status(txid);
+                if(st == transaction_status_t::COMMIT || st == transaction_status_t::ABORT){
+                    // node_id is unknown here; use 0 (or expose a getter from CascadeCBDC if you want real id)
+                    TimestampLogger::log(CBDC_TAG_CLIENT_STATUS_TERMINAL, /*node_id*/0, txid, (uint64_t)st);
+                    it = pending.erase(it);
+                } else {
+                    ++it;
+                }
+            }
             std::this_thread::sleep_for(poll_interval);
         }
+
         std::this_thread::sleep_for(std::chrono::seconds(wait_time));
     }
 
@@ -215,7 +254,7 @@ int main(int argc, char** argv){
             auto balance = CBDC_COMPUTE_WALLET_BALANCE(wallet);
             if(balance != item.second){
                 error_count++;
-                std::cout << "  - balance error for wallet " << item.first << ": expected " << item.second << " but got " << balance << std::endl;
+                // std::cout << "  - balance error for wallet " << item.first << ": expected " << item.second << " but got " << balance << std::endl;
             }
         }
 
@@ -238,7 +277,7 @@ int main(int argc, char** argv){
                 //std::cout << "  - status error for TX (" << i << "," << txid << "): expected " << cbdc.status_to_string(expected) << " but got " << cbdc.status_to_string(status) << std::endl;
             }
         }
-        
+
         std::cout << "  " << error_count << " status errors found" << std::endl;
         std::this_thread::sleep_for(std::chrono::seconds(wait_time));
     }

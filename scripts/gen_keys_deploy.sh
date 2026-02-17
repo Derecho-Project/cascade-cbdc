@@ -14,17 +14,27 @@ eval "$(ssh-agent -s)"
 ssh-add ~/.ssh/id_ed25519
 # -------- DISTRIBUTION --------
 
-if [ ($1 == "config" ) || ($1 == "all") ]; then
+if [ $1 == "config" ] || [ $1 == "all" ]; then
     for n in {0..8}; do
-        scp ../scp/n${n}/derecho.cfg.tmp \
-            node${n}:"~/cascade-cbdc/cfg/derecho.cfg.tmp"
-        scp ../scp/n${n}/derecho_node.cfg.tmp \
-            node${n}:"~/cascade-cbdc/cfg/derecho_node.cfg.tmp"
-        scp ../scp/n${n}/wanagent.json \
-            node${n}:"~/cascade-cbdc/cfg/wanagent.json"
+        if [ $n == 4 ]; then
+            scp ../scp/n${n}/derecho.cfg.tmp \
+                node${n}:~/cascade-cbdc/build/cfg/client/derecho.cfg
+            scp ../scp/n${n}/derecho_node.cfg.tmp \
+                node${n}:~/cascade-cbdc/build/cfg/client/derecho_node.cfg
+            scp ../scp/n${n}/wanagent.json \
+                node${n}:~/cascade-cbdc/build/cfg/client/wanagent.json
+        else
+            scp ../scp/n${n}/derecho.cfg.tmp \
+                node${n}:~/cascade-cbdc/build/cfg/n${n}/derecho.cfg
+            scp ../scp/n${n}/derecho_node.cfg.tmp \
+                node${n}:~/cascade-cbdc/build/cfg/n${n}/derecho_node.cfg
+            scp ../scp/n${n}/wanagent.json \
+                node${n}:~/cascade-cbdc/build/cfg/n${n}/wanagent.json
+        fi
     done
+
 fi
-if [ ($1 -eq "keys") || ($1 -eq "all") ]
+if [ $1 == "keys" ] || [ $1 == "all" ]; then
     # Key Gen
     openssl genpkey -algorithm rsa -outform PEM -out private_key.pem
     openssl pkey -in private_key.pem -pubout -outform PEM -out service_public_key.pem
@@ -54,6 +64,5 @@ if [ ($1 -eq "keys") || ($1 -eq "all") ]
 
     # Cleanup
     rm -f private_key.pem service_public_key.pem backup_private_key.pem client_dummy_private_key.pem
-
 fi
 echo "Remote distribution complete."

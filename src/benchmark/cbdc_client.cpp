@@ -455,7 +455,6 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
         auto sub = capi.subscribe_signature_notifications(sig_key);
         std::cout << "[subscribe-ok] " << sig_key << "\n";
     }
-    std::this_thread::sleep_for(std::chrono::seconds(5));
 
     std::mutex cb_mx;
     std::condition_variable cb_cv;
@@ -464,6 +463,7 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
     std::vector<uint8_t> server_signature, prev_signature;
 
 
+    TimestampLogger::log(CBDC_TAG_CLIENT_PUT_START, my_id, request.Body.txid, 0);
     auto put_res   = capi.put<CBDC_OBJECT_POOL_TYPE>(obj, CBDC_OBJECT_POOL_SUBGROUP, shard_index, true);
     auto put_reply = put_res.get().begin()->second.get();
 
@@ -472,6 +472,8 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
     obj.previous_version        = std::get<2>(put_reply);
     obj.previous_version_by_key = std::get<3>(put_reply);
 
+    TimestampLogger::log(CBDC_TAG_CLIENT_PUT_REPLY, my_id, request.Body.txid, obj.version);
+    TimestampLogger::log(CBDC_TAG_CLIENT_SIG_WAIT_START, my_id, request.Body.txid, obj.version);
     signature_notification_handler.register_callback(obj.version, 
                 [&](persistent::version_t data_ver, persistent::version_t hash_ver,
                       const std::vector<uint8_t>& sig, persistent::version_t /*prev_signed_ver*/,
@@ -482,9 +484,11 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
         server_signature    = sig;
         prev_signature      = prev_sig;
         fired = true;
+        TimestampLogger::log(CBDC_TAG_CLIENT_SIG_FIRED, my_id, request.Body.txid, hash_ver);
         cb_cv.notify_all();
     });
 
+    TimestampLogger::log(CBDC_TAG_CLIENT_PUT_START, my_id, request.Body.txid, 0);
     {
         std::unique_lock<std::mutex> lk(cb_mx);
         if (!cb_cv.wait_for(lk, std::chrono::seconds(5), [&]{ return fired; })) {
@@ -492,6 +496,7 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
             std::cerr << "[timeout] No signature notification for data ver "
                       << std::hex << obj.version << std::dec
                       << " key=" << sig_key << "\n";
+            TimestampLogger::log(CBDC_TAG_CLIENT_VERIFY_FAIL, my_id, request.Body.txid, 10);
             return false;
         }
     }
@@ -499,18 +504,22 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
     // dump_request("CLIENT REQUEST", obj);
     auto hash_get_result = capi.get(sig_key, obj.version /* exact version */, /*stable=*/false);
     auto hashObject = hash_get_result.get().begin()->second.get();
+    TimestampLogger::log(CBDC_TAG_CLIENT_HASH_GET_DONE, my_id, request.Body.txid, hashObject.version);
 
     auto local_hash = compute_hash(obj);
     if (hashObject.blob.size != local_hash.size() ||
         memcmp(hashObject.blob.bytes, local_hash.data(), local_hash.size()) != 0) {
         std::cout << "Server hash != local hash\n";
+        TimestampLogger::log(CBDC_TAG_CLIENT_VERIFY_FAIL, my_id, request.Body.txid, 1); 
         return false;
     }
     if (!verify_object_signature(hashObject, server_signature, prev_signature)) {
         std::cout << "Invalid server signature\n";
+        TimestampLogger::log(CBDC_TAG_CLIENT_VERIFY_FAIL, my_id, request.Body.txid, 1); 
         return false;
     }
     std::cout << "Success! Signed receipt verified.\n";
+    TimestampLogger::log(CBDC_TAG_CLIENT_VERIFY_DONE, my_id, request.Body.txid, obj.version);
     return true;
 }
 
