@@ -56,6 +56,7 @@ int main(int argc, char** argv){
     uint64_t batch_max_size = DEFAULT_BATCH_MAX_SIZE;
     uint64_t batch_time_us = DEFAULT_BATCH_TIME_US;
 
+
     while ((c = getopt(argc, argv, "o:r:w:l:b:x:u:amsch")) != -1){
         switch(c){
             case 'o':
