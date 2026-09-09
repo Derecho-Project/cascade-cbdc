@@ -8,6 +8,7 @@
 #include <tuple>
 #include <fstream>
 #include <mutex>
+#include <atomic>
 #include <shared_mutex>
 #include <thread>
 #include <limits>
@@ -84,6 +85,15 @@ public:
         }
     }
 
+    // Removes a pending callback. Callbacks are registered with `[&]` captures of stack
+    // locals in put_with_signature(), so they MUST be removed before that frame returns --
+    // otherwise a late notification invokes a callback holding dangling references.
+    void unregister_callback(persistent::version_t desired_data_version) {
+        std::lock_guard<std::mutex> lk(sig_mtx);
+        callbacks_by_version.erase(desired_data_version);
+        sig_buffer.erase(desired_data_version);
+    }
+
     void register_callback(persistent::version_t desired_data_version,
                         const signature_callback_t& callback) {
         // If the notification already arrived, deliver immediately
@@ -153,6 +163,7 @@ class CascadeCBDC {
     std::unique_ptr<openssl::Verifier> service_verifier;
     SignatureNotificationHandler signature_notification_handler;
     std::set<std::string> subscribed_notification_keys;
+    std::atomic<uint64_t> signature_fallback_count{0};
     std::mutex txid_mtx;
     bool signature_pool_handler_registered = false;
     transaction_id_t next_transaction_id();
@@ -174,6 +185,10 @@ class CascadeCBDC {
     transaction_id_t redeem(wallet_id_t wallet_id,coin_value_t value);
 
     bool put_with_signature(thread_request_t operation, cbdc_request_t& request);
+
+    // How many receipts were recovered by the direct-get fallback because the
+    // signature notification never arrived within the wait window.
+    uint64_t get_signature_fallback_count() const { return signature_fallback_count.load(); }
 
     wallet_t get_wallet(wallet_id_t wallet_id);
     transaction_status_t get_status(const transaction_id_t& txid);

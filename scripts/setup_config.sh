@@ -2,12 +2,12 @@
 
 NUM_SHARDS=2
 if [ ! -z "$1" ]; then
-    NUM_SHARDS=$2
+    NUM_SHARDS=$1
 fi
 
 NUM_REPLICAS=4
 if [ ! -z "$2" ]; then
-    NUM_REPLICAS=$4
+    NUM_REPLICAS=$2
 fi
 
 NUM_SERVERS=$((1 + (NUM_SHARDS * NUM_REPLICAS)))
@@ -65,10 +65,11 @@ for i in $(seq 0 $((NUM_SERVERS - 1))); do
 done
 
 ln -sf ../$GEN_KEYS $GEN_KEYS
-ln -sf ../$DLL_TMP client/$DLL_CFG
-ln -sf ../$DFG_TMP client/$DFG_CFG
 
 mkdir -p client
+ln -sf ../$DLL_TMP client/$DLL_CFG
+ln -sf ../$DFG_TMP client/$DFG_CFG
+ln -sf ../$LAYOUT_CFG client/$LAYOUT_CFG
 ln -sf ../../run_benchmark client/run_benchmark
 ln -sf ../../generate_workload client/generate_workload
 ln -sf ../../metrics.py client/metrics.py

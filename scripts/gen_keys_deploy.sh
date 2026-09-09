@@ -59,7 +59,7 @@ if [ $1 == "keys" ] || [ $1 == "all" ]; then
         scp backup_private_key.pem \
             node${n}:"~/cascade-cbdc/build/cfg/n${n}/private_key.pem"
         scp service_public_key.pem \
-            node${n}:"~/cascade-cbdc/build/cfg/n${n}service_public_key.pem"
+            node${n}:"~/cascade-cbdc/build/cfg/n${n}/service_public_key.pem"
     done
 
     # Cleanup

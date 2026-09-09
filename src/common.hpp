@@ -16,6 +16,11 @@ using coin_value_t = uint64_t;
 using wallet_t = coin_value_t; // TODO use separate coins instead of just a balance?
 using transaction_id_t = uint64_t; // std::hash | TODO use something bigger for lower chance of collision?
 
+// Sentinel returned by mint()/transfer()/redeem() when the request could not be submitted.
+// transaction_id_t is unsigned, so a bare `return -1` is indistinguishable from a real id;
+// callers MUST compare against this before treating a value as a transaction id.
+inline constexpr transaction_id_t INVALID_TXID = ~static_cast<transaction_id_t>(0);
+
 struct cbdc_request_t : public mutils::ByteRepresentable {
     struct body : public mutils::ByteRepresentable {
         transaction_id_t txid;

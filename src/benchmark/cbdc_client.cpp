@@ -136,7 +136,7 @@ transaction_id_t CascadeCBDC::mint(wallet_id_t wallet_id,coin_value_t value){
         return txid;
     }
     else 
-        return -1;
+        return INVALID_TXID;
 }
 
 transaction_id_t CascadeCBDC::transfer(const std::unordered_map<wallet_id_t,coin_value_t>& senders,const std::unordered_map<wallet_id_t,coin_value_t>& receivers){
@@ -203,7 +203,7 @@ transaction_id_t CascadeCBDC::transfer(const std::unordered_map<wallet_id_t,coin
         TimestampLogger::log(CBDC_TAG_CLIENT_TRANSFER_QUEUE,my_id,txid,first_wallet);
         return txid;
     } else 
-        return -1;
+        return INVALID_TXID;
 }
 
 transaction_id_t CascadeCBDC::redeem(wallet_id_t wallet_id,coin_value_t value){
@@ -453,6 +453,7 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
 
     if (subscribed_notification_keys.insert(sig_key).second) {
         auto sub = capi.subscribe_signature_notifications(sig_key);
+        sub.get();
         std::cout << "[subscribe-ok] " << sig_key << "\n";
     }
 
@@ -488,16 +489,71 @@ bool CascadeCBDC::put_with_signature(thread_request_t op, cbdc_request_t& reques
         cb_cv.notify_all();
     });
 
+    // The callback above captures stack locals by reference; make sure it is removed on
+    // every exit path from this function, including the timeout/fallback paths below.
+    struct CallbackGuard {
+        SignatureNotificationHandler& handler;
+        persistent::version_t version;
+        ~CallbackGuard() { handler.unregister_callback(version); }
+    } cb_guard{signature_notification_handler, obj.version};
+
     TimestampLogger::log(CBDC_TAG_CLIENT_PUT_START, my_id, request.Body.txid, 0);
     {
         std::unique_lock<std::mutex> lk(cb_mx);
         if (!cb_cv.wait_for(lk, std::chrono::seconds(5), [&]{ return fired; })) {
 
+            lk.unlock();
             std::cerr << "[timeout] No signature notification for data ver "
                       << std::hex << obj.version << std::dec
                       << " key=" << sig_key << "\n";
-            TimestampLogger::log(CBDC_TAG_CLIENT_VERIFY_FAIL, my_id, request.Body.txid, 10);
-            return false;
+
+            // A subscription applied after the ordered put is not retroactive, so the
+            // notification for this version may never be sent. Fetch the receipt directly
+            // rather than failing the request.
+            try {
+                auto fb_hash = capi.get(sig_key, obj.version, /*stable=*/false)
+                                   .get().begin()->second.get();
+                if (fb_hash.blob.size == 0) {
+                    std::cerr << "[fallback] hash object not present yet\n";
+                    TimestampLogger::log(CBDC_TAG_CLIENT_VERIFY_FAIL, my_id, request.Body.txid, 10);
+                    return false;
+                }
+
+                auto fb_local_hash = compute_hash(obj);
+                if (fb_hash.blob.size != fb_local_hash.size() ||
+                    memcmp(fb_hash.blob.bytes, fb_local_hash.data(), fb_local_hash.size()) != 0) {
+                    std::cout << "Server hash != local hash (fallback)\n";
+                    TimestampLogger::log(CBDC_TAG_CLIENT_VERIFY_FAIL, my_id, request.Body.txid, 1);
+                    return false;
+                }
+
+                auto fb_sig_reply = capi.get_signature(sig_key, obj.version, /*stable=*/false)
+                                        .get().begin()->second.get();
+                const std::vector<uint8_t>& fb_sig = std::get<0>(fb_sig_reply);
+                persistent::version_t fb_prev_ver = std::get<1>(fb_sig_reply);
+
+                std::vector<uint8_t> fb_prev_sig;
+                if (fb_prev_ver != persistent::INVALID_VERSION) {
+                    auto fb_prev_reply = capi.get_signature_by_version(sig_key, fb_prev_ver)
+                                             .get().begin()->second.get();
+                    fb_prev_sig = std::get<0>(fb_prev_reply);
+                }
+
+                if (!verify_object_signature(fb_hash, fb_sig, fb_prev_sig)) {
+                    std::cout << "Invalid server signature (fallback)\n";
+                    TimestampLogger::log(CBDC_TAG_CLIENT_VERIFY_FAIL, my_id, request.Body.txid, 1);
+                    return false;
+                }
+
+                signature_fallback_count++;
+                std::cout << "Success! Signed receipt verified (fallback).\n";
+                TimestampLogger::log(CBDC_TAG_CLIENT_VERIFY_DONE, my_id, request.Body.txid, obj.version);
+                return true;
+            } catch (const std::exception& e) {
+                std::cerr << "[fallback-error] " << e.what() << "\n";
+                TimestampLogger::log(CBDC_TAG_CLIENT_VERIFY_FAIL, my_id, request.Body.txid, 10);
+                return false;
+            }
         }
     }
 

@@ -14,6 +14,11 @@
 // but we'll use a smaller interval for per-tx completion polling below.
 #define LAST_TX_POLL_INTERVAL_MS 1000
 
+// Upper bounds on the completion waits. Without these a single request that never
+// reaches a terminal status blocks the whole benchmark forever.
+#define MINT_WAIT_TIMEOUT_S 120
+#define TX_WAIT_TIMEOUT_S 300
+
 #define DEFAULT_SECONDS_AFTER_STEP 5
 #define DEFAULT_BATCH_MIN_SIZE 0
 #define DEFAULT_BATCH_MAX_SIZE 150
@@ -118,6 +123,8 @@ int main(int argc, char** argv){
     CascadeCBDC cbdc;
     CBDCBenchmarkWorkload& benchmark = CBDCBenchmarkWorkload::from_file(workload_file);
     std::unordered_map<uint64_t,transaction_id_t> transfer_id;
+    uint64_t failed_mints = 0;
+    uint64_t failed_submits = 0;
 
     std::cout << "setting up ..." << std::endl;
     std::cout << "  workload_file = " << workload_file << std::endl;
@@ -150,10 +157,15 @@ int main(int argc, char** argv){
         auto& wallets = benchmark.get_wallets();
 
         auto extra_time = std::chrono::nanoseconds(0);
-        transaction_id_t last_tx;
+        transaction_id_t last_tx = INVALID_TXID;
         for(auto& wallet : wallets){
             auto start = std::chrono::steady_clock::now();
-            last_tx = cbdc.mint(wallet.first,wallet.second);
+            auto mint_tx = cbdc.mint(wallet.first,wallet.second);
+            if(mint_tx == INVALID_TXID){
+                failed_mints++;
+            } else {
+                last_tx = mint_tx;
+            }
             auto end = std::chrono::steady_clock::now();
 
             if(rate_control){
@@ -173,8 +185,21 @@ int main(int argc, char** argv){
         // poll until last TX is finished
         std::cout << "waiting last mint to finish ..." << std::endl;
         auto poll_interval = std::chrono::milliseconds(LAST_TX_POLL_INTERVAL_MS);
-        while(cbdc.get_status(last_tx) == transaction_status_t::UNKNOWN){
-            std::this_thread::sleep_for(poll_interval);
+        if(last_tx == INVALID_TXID){
+            std::cout << "  WARNING: no mint was submitted successfully, not waiting" << std::endl;
+        } else {
+            auto mint_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(MINT_WAIT_TIMEOUT_S);
+            while(cbdc.get_status(last_tx) == transaction_status_t::UNKNOWN){
+                if(std::chrono::steady_clock::now() > mint_deadline){
+                    std::cout << "  WARNING: timed out after " << MINT_WAIT_TIMEOUT_S
+                              << "s waiting for the last mint to reach a terminal status" << std::endl;
+                    break;
+                }
+                std::this_thread::sleep_for(poll_interval);
+            }
+        }
+        if(failed_mints > 0){
+            std::cout << "  " << failed_mints << " mints failed to submit" << std::endl;
         }
         std::this_thread::sleep_for(std::chrono::seconds(wait_time));
     }
@@ -190,6 +215,11 @@ int main(int argc, char** argv){
                 auto start = std::chrono::steady_clock::now();
                 auto& transfer = transfers[i];
                 auto txid = cbdc.transfer(transfer.senders,transfer.receivers);
+                if(txid == INVALID_TXID){
+                    // Never submitted: recording it would make the wait below unsatisfiable.
+                    failed_submits++;
+                    continue;
+                }
                 transfer_id[i] = txid;
                 auto end = std::chrono::steady_clock::now();
 
@@ -217,12 +247,21 @@ int main(int argc, char** argv){
         auto poll_interval = std::chrono::milliseconds(5);
 
         std::unordered_set<uint64_t> pending;
-        pending.reserve(transfers.size());
-        for(uint64_t i=0;i<transfers.size();i++){
-            pending.insert(i);
+        pending.reserve(transfer_id.size());
+        for(const auto& entry : transfer_id){
+            pending.insert(entry.first);
+        }
+        if(failed_submits > 0){
+            std::cout << "  " << failed_submits << " transfers failed to submit (excluded from the wait)" << std::endl;
         }
 
+        auto tx_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(TX_WAIT_TIMEOUT_S);
         while(!pending.empty()){
+            if(std::chrono::steady_clock::now() > tx_deadline){
+                std::cout << "  WARNING: timed out after " << TX_WAIT_TIMEOUT_S << "s with "
+                          << pending.size() << " TXs still not in a terminal status" << std::endl;
+                break;
+            }
             for(auto it = pending.begin(); it != pending.end(); ){
                 uint64_t i = *it;
                 auto txid = transfer_id[i];
@@ -284,6 +323,11 @@ int main(int argc, char** argv){
     }
 
     // write measurements
+    std::cout << "submission summary:" << std::endl;
+    std::cout << "  mints failed to submit     = " << failed_mints << std::endl;
+    std::cout << "  transfers failed to submit = " << failed_submits << std::endl;
+    std::cout << "  receipts via get fallback  = " << cbdc.get_signature_fallback_count() << std::endl;
+
     std::cout << "writing log to '" << fname << "' ..." << std::endl;
     cbdc.write_logs(fname,remote_logs);
 
